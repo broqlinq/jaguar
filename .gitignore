@@ -1,0 +1,65 @@
+### --- Java & Build Tools --- ###
+# Compiled class files
+*.class
+
+# Log files
+*.log
+
+# BlueJ files
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files #
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+# Note: DO NOT ignore .mvn/wrapper/ if you want others to use the Maven Wrapper
+
+# Gradle
+.gradle/
+build/
+/out/
+
+### --- IntelliJ IDEA --- ###
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+gen/
+
+# If you want to share specific IntelliJ code styles or run configurations,
+# you can un-ignore them, but generally, ignoring .idea/ is safest for beginners.
+# !.idea/runConfigurations/
+# !.idea/codeStyles/
+
+### --- OS Specific --- ###
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+### --- Other IDEs (Optional) --- ###
+.project
+.classpath
+.settings/
+.vscode/
