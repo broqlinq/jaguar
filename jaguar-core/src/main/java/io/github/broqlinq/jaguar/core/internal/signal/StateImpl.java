@@ -63,9 +63,7 @@ class StateImpl<T> implements State<T> {
         T oldValue;
         do {
             oldValue = getValue();
-            var valuesEqual = equalityChecker == null
-                    ? oldValue == newValue
-                    : equalityChecker.test(oldValue, newValue);
+            var valuesEqual = equalityChecker == null ? oldValue == newValue : equalityChecker.test(oldValue, newValue);
 
             if (valuesEqual) {
                 return;
@@ -94,9 +92,7 @@ class StateImpl<T> implements State<T> {
             oldValue = getValue();
             newValue = updater.apply(oldValue);
 
-            var valuesEqual = equalityChecker == null
-                    ? oldValue == newValue
-                    : equalityChecker.test(oldValue, newValue);
+            var valuesEqual = equalityChecker == null ? oldValue == newValue : equalityChecker.test(oldValue, newValue);
 
             if (valuesEqual) {
                 return;
