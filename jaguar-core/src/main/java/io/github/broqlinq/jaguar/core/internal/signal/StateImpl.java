@@ -11,7 +11,7 @@ import java.util.function.BiPredicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
-class StateImpl<T> implements State<T> {
+public class StateImpl<T> implements State<T> {
 
     private static final VarHandle VALUE_HANDLE;
 
@@ -30,12 +30,17 @@ class StateImpl<T> implements State<T> {
 
     private T value;
 
-    StateImpl(BiPredicate<? super T, ? super T> equalityChecker) {
+    public StateImpl(BiPredicate<? super T, ? super T> equalityChecker) {
         this.equalityChecker = Objects.requireNonNull(equalityChecker, "equality checker must not be null");
     }
 
-    StateImpl() {
+    public StateImpl() {
         this.equalityChecker = null;
+    }
+
+    public StateImpl(T initialValue) {
+        value = initialValue;
+        equalityChecker = null;
     }
 
     @Override
@@ -99,7 +104,7 @@ class StateImpl<T> implements State<T> {
             }
         } while (!VALUE_HANDLE.compareAndSet(this, oldValue, newValue));
 
-        ObserverSupport.invalidateAll(observers);
+        BatchManager.run(() -> ObserverSupport.invalidateAll(observers));
     }
 
     @SuppressWarnings("unchecked")

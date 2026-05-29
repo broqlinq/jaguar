@@ -7,7 +7,6 @@ final class ObserverSupport {
     private ObserverSupport() {
     }
 
-
     static void invalidateAll(Set<Observer> observers) {
         for (var observer : observers) {
             observer.invalidate();

@@ -1,5 +1,7 @@
 package io.github.broqlinq.jaguar.core.signal;
 
+import io.github.broqlinq.jaguar.core.internal.signal.StateImpl;
+
 import java.util.function.BiPredicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -18,4 +20,7 @@ public interface State<T> extends Signal<T> {
 
     void update(UnaryOperator<T> updater, BiPredicate<? super T, ? super T> equalityChecker);
 
+    static <T> State<T> of(T initial) {
+        return new StateImpl<>(initial);
+    }
 }

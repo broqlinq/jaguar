@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.function.Supplier;
 
-final class ComputedImpl<T> implements Signal<T>, Observer {
+public final class ComputedImpl<T> implements Signal<T>, Observer {
 
     private static final VarHandle CACHE_HANDLE;
 
@@ -32,7 +32,7 @@ final class ComputedImpl<T> implements Signal<T>, Observer {
     private volatile boolean dirty = true;
     private T cachedValue;
 
-    ComputedImpl(Supplier<? extends T> supplier) {
+    public ComputedImpl(Supplier<? extends T> supplier) {
         this.supplier = Objects.requireNonNull(supplier, "supplier must not be null");
         this.equalityChecker = null;
     }
@@ -68,7 +68,7 @@ final class ComputedImpl<T> implements Signal<T>, Observer {
                 }
             }
         }
-        return cachedValue;
+        return getCachedValue();
     }
 
     private T reevaluate() {
@@ -85,7 +85,7 @@ final class ComputedImpl<T> implements Signal<T>, Observer {
         }
 
         dirty = true;
-        ObserverSupport.invalidateAll(observers);
+        BatchManager.run(() -> ObserverSupport.invalidateAll(observers));
     }
 
     private void cleanupSubscriptions() {
@@ -107,15 +107,4 @@ final class ComputedImpl<T> implements Signal<T>, Observer {
         }
     }
 
-    private static final class EvaluationSession implements AutoCloseable {
-
-        EvaluationSession(Observer observer) {
-            EvaluationContext.push(observer);
-        }
-
-        @Override
-        public void close() {
-            EvaluationContext.pop();
-        }
-    }
 }

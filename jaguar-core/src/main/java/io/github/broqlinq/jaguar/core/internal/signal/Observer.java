@@ -4,7 +4,7 @@ public interface Observer {
 
     void invalidate();
 
-    void subscribe(Observer.Subscription subscription);
+    void subscribe(Subscription subscription);
 
     interface Subscription {
 
