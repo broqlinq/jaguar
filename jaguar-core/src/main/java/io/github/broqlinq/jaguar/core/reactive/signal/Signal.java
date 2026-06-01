@@ -1,4 +1,4 @@
-package io.github.broqlinq.jaguar.core.reactive;
+package io.github.broqlinq.jaguar.core.reactive.signal;
 
 import java.util.Objects;
 import java.util.function.Function;

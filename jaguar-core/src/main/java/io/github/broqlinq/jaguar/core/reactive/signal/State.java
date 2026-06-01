@@ -1,4 +1,4 @@
-package io.github.broqlinq.jaguar.core.reactive;
+package io.github.broqlinq.jaguar.core.reactive.signal;
 
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
