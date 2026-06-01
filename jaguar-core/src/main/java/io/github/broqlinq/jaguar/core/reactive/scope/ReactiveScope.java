@@ -1,15 +1,30 @@
-package io.github.broqlinq.jaguar.core.reactive;
+package io.github.broqlinq.jaguar.core.reactive.scope;
 
+import io.github.broqlinq.jaguar.core.reactive.signal.Effect;
+import io.github.broqlinq.jaguar.core.reactive.signal.Signal;
+import io.github.broqlinq.jaguar.core.reactive.signal.State;
 import io.github.broqlinq.jaguar.core.util.Equivalence;
 
 import java.util.function.Supplier;
 
 public interface ReactiveScope extends AutoCloseable {
 
+    static ReactiveScope create() {
+        throw new UnsupportedOperationException("Unimplemented");
+    }
+
+    static ReactiveScope create(String name) {
+        throw new UnsupportedOperationException("Unimplemented");
+    }
+
+    static ReactiveScope create(String name, Scheduler scheduler) {
+        throw new UnsupportedOperationException("Unimplemented");
+    }
+
     ReactiveScope childScope(String name);
 
     default ReactiveScope childScope() {
-        return childScope("");
+        return childScope(null);
     }
 
     Scheduler scheduler();
