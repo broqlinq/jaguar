@@ -1,6 +1,6 @@
-package io.github.broqlinq.jaguar.core.internal.signal;
+package io.github.broqlinq.jaguar.core.old.internal.signal;
 
-import io.github.broqlinq.jaguar.core.signal.Signal;
+import io.github.broqlinq.jaguar.core.old.signal.Signal;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -37,7 +37,7 @@ public final class ComputedImpl<T> implements Signal<T>, Observer {
         this.equalityChecker = null;
     }
 
-    ComputedImpl(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> equalityChecker) {
+    public ComputedImpl(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> equalityChecker) {
         this.supplier = Objects.requireNonNull(supplier, "supplier must not be null");
         this.equalityChecker = Objects.requireNonNull(equalityChecker, "equality checker must not be null");
     }
@@ -63,7 +63,7 @@ public final class ComputedImpl<T> implements Signal<T>, Observer {
                             : equalityChecker.test(oldValue, newValue);
 
                     if (!valuesEqual) {
-                        ObserverSupport.invalidateAll(observers);
+                        BatchManager.run(() -> ObserverSupport.invalidateAll(observers));
                     }
                 }
             }

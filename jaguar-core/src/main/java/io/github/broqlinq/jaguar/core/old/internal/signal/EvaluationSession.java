@@ -1,4 +1,4 @@
-package io.github.broqlinq.jaguar.core.internal.signal;
+package io.github.broqlinq.jaguar.core.old.internal.signal;
 
 final class EvaluationSession implements AutoCloseable {
 

@@ -1,6 +1,6 @@
-package io.github.broqlinq.jaguar.core.internal.signal;
+package io.github.broqlinq.jaguar.core.old.internal.signal;
 
-import io.github.broqlinq.jaguar.core.signal.State;
+import io.github.broqlinq.jaguar.core.old.signal.State;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -49,9 +49,9 @@ public class StateImpl<T> implements State<T> {
     }
 
     @Override
-    public void set(T newValue, BiPredicate<? super T, ? super T> equalityChecker) {
-        Objects.requireNonNull(equalityChecker, "equality checker must not be null");
-        setValue(newValue, equalityChecker);
+    public void set(T newValue, BiPredicate<? super T, ? super T> eqCheck) {
+        Objects.requireNonNull(eqCheck, "equality checker must not be null");
+        setValue(newValue, eqCheck);
     }
 
     @Override
@@ -60,8 +60,8 @@ public class StateImpl<T> implements State<T> {
     }
 
     @Override
-    public void set(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> equalityChecker) {
-        set(supplier.get(), equalityChecker);
+    public void set(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> eqCheck) {
+        set(supplier.get(), eqCheck);
     }
 
     private void setValue(T newValue, BiPredicate<? super T, ? super T> equalityChecker) {
@@ -75,7 +75,7 @@ public class StateImpl<T> implements State<T> {
             }
         } while (!VALUE_HANDLE.compareAndSet(this, oldValue, newValue));
 
-        ObserverSupport.invalidateAll(observers);
+        BatchManager.run(() -> ObserverSupport.invalidateAll(observers));
     }
 
     @Override
@@ -85,10 +85,10 @@ public class StateImpl<T> implements State<T> {
     }
 
     @Override
-    public void update(UnaryOperator<T> updater, BiPredicate<? super T, ? super T> equalityChecker) {
+    public void update(UnaryOperator<T> updater, BiPredicate<? super T, ? super T> eqCheck) {
         Objects.requireNonNull(updater, "updater must not be null");
-        Objects.requireNonNull(equalityChecker, "equality checker must not be null");
-        updateValue(updater, equalityChecker);
+        Objects.requireNonNull(eqCheck, "equality checker must not be null");
+        updateValue(updater, eqCheck);
     }
 
     private void updateValue(UnaryOperator<T> updater, BiPredicate<? super T, ? super T> equalityChecker) {

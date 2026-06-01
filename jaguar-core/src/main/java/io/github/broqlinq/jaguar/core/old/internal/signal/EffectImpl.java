@@ -1,6 +1,6 @@
-package io.github.broqlinq.jaguar.core.internal.signal;
+package io.github.broqlinq.jaguar.core.old.internal.signal;
 
-import io.github.broqlinq.jaguar.core.signal.Effect;
+import io.github.broqlinq.jaguar.core.old.signal.Effect;
 
 import java.util.ArrayList;
 import java.util.List;
