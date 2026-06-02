@@ -1,4 +1,4 @@
-package io.github.broqlinq.jaguar.core.reactive.signal;
+package io.github.broqlinq.jaguar.core.reactive;
 
 public interface Effect extends AutoCloseable {
 

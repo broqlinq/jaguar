@@ -1,13 +1,10 @@
 package io.github.broqlinq.jaguar.core.util;
 
 import java.util.Objects;
-import java.util.function.Function;
-import java.util.function.ToDoubleFunction;
-import java.util.function.ToIntFunction;
-import java.util.function.ToLongFunction;
+import java.util.function.*;
 
 @FunctionalInterface
-public interface Equivalence<T> {
+public interface Equivalence<T> extends BiPredicate<T, T> {
 
     static <T, R> Equivalence<T> by(Function<? super T, ? extends R> mapper) {
         Objects.requireNonNull(mapper);
@@ -74,11 +71,16 @@ public interface Equivalence<T> {
         return (_, _) -> true;
     }
 
-    boolean areEqual(T a, T b);
+    boolean equivalent(T a, T b);
+
+    @Override
+    default boolean test(T t, T t2) {
+        return equivalent(t, t2);
+    }
 
     default Equivalence<T> and(Equivalence<? super T> other) {
         Objects.requireNonNull(other);
-        return (a, b) -> areEqual(a, b) && other.areEqual(a, b);
+        return (a, b) -> equivalent(a, b) && other.equivalent(a, b);
     }
 
     default <R> Equivalence<T> and(Function<? super T, ? extends R> mapper) {
