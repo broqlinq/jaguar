@@ -5,11 +5,13 @@ import io.github.broqlinq.jaguar.reactive.*;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.function.BiPredicate;
 import java.util.function.IntFunction;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-public final class ThreadConfinedScope implements Scope, ScopeContext {
+public final class ThreadConfinedScope implements Scope {
 
     private final String name;
 
@@ -19,14 +21,15 @@ public final class ThreadConfinedScope implements Scope, ScopeContext {
 
     private final Scheduler scheduler;
 
-    private final DependencyTracker tracker = new DependencyTracker();
+    private final TrackingContext tracker = new TrackingContext();
 
     private final LinkedHashSet<Scoped> effects = new LinkedHashSet<>();
     private final LinkedHashSet<Scoped> computedSignals = new LinkedHashSet<>();
     private final LinkedHashSet<Scoped> stateSignals = new LinkedHashSet<>();
-
     private boolean closed = false;
     private boolean closing = false;
+
+    Consumer currentConsumer;
 
     public ThreadConfinedScope(String name, Scheduler scheduler) {
         this(name, null, scheduler);
@@ -49,6 +52,10 @@ public final class ThreadConfinedScope implements Scope, ScopeContext {
         return collection.toArray(arraySupplier);
     }
 
+    public static Scope create(String name) {
+        return new ThreadConfinedScope(name, new ThreadConfinedScheduler(Thread.currentThread()));
+    }
+
     @Override
     public String name() {
         return name;
@@ -57,7 +64,6 @@ public final class ThreadConfinedScope implements Scope, ScopeContext {
     @Override
     public Scope child(String name) {
         assertAccess();
-
         var scope = new ThreadConfinedScope(name, this, scheduler);
         children.add(scope);
         return scope;
@@ -66,7 +72,6 @@ public final class ThreadConfinedScope implements Scope, ScopeContext {
     @Override
     public Scheduler scheduler() {
         assertAccess();
-
         return scheduler;
     }
 
@@ -78,39 +83,56 @@ public final class ThreadConfinedScope implements Scope, ScopeContext {
     }
 
     @Override
+    public IntSignal intConstant(int value) {
+        assertAccess();
+        return new ScopedIntConstant(this, value);
+    }
+
+    @Override
     public <T> Signal<T> computed(Supplier<? extends T> supplier) {
         assertAccess();
 
-        var computed = new ScopedComputed<T>(this, supplier);
+        var computed = new ScopedComputed<T>(this, supplier, Objects::equals);
         computedSignals.add(computed);
-        computed.onDispose(() -> computedSignals.remove(computed));
         return computed;
     }
 
     @Override
     public <T> Signal<T> computed(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> eq) {
-        // Ignore for now
-        throw new UnsupportedOperationException("Not implemented yet");
+        // Ignore for now, return regular computed signal
+        return computed(supplier);
+    }
+
+    @Override
+    public IntSignal computedInt(IntSupplier supplier) {
+        assertAccess();
+        var computedInt = new ScopedIntComputed(this, supplier);
+        computedSignals.add(computedInt);
+        return computedInt;
     }
 
     @Override
     public <T> State<T> state(T initial, BiPredicate<? super T, ? super T> eq) {
         assertAccess();
-
         var state = new ScopedState<>(this, initial, eq);
         stateSignals.add(state);
-        state.onDispose(() -> stateSignals.remove(state));
         return state;
+    }
+
+    @Override
+    public IntState intState(int initial) {
+        assertAccess();
+        var intState = new ScopedIntState(this, initial);
+        stateSignals.add(intState);
+        return intState;
     }
 
     @Override
     public Effect effect(Runnable eff) {
         assertAccess();
-
         var effect = new ScopedEffect(this, eff);
         effects.add(effect);
-        effect.onDispose(() -> effects.remove(effect));
-        effect.run();
+        effect.scheduleEffect();
         return effect;
     }
 
@@ -123,13 +145,11 @@ public final class ThreadConfinedScope implements Scope, ScopeContext {
         return closed;
     }
 
-    @Override
-    public Tracker tracker() {
+    TrackingContext trackingContext() {
         assertOpen();
         return tracker;
     }
 
-    @Override
     public void assertOwnerThread() {
         if (!scheduler.isOwnerThread()) {
             throw new WrongThreadException("Attempted access from non-parent thread in scope '" + name + "'");
@@ -174,38 +194,56 @@ public final class ThreadConfinedScope implements Scope, ScopeContext {
             disposeEffects();
             disposeComputedSignals();
             disposeStateSignals();
+            if (parent != null) {
+                ((ThreadConfinedScope) parent).children.remove(this);
+            }
             closed = true;
         } finally {
-            closing = true;
+            closing = false;
         }
+    }
+
+    void removeEffect(ReactiveNode effect) {
+        effects.remove(effect);
+    }
+
+    void removeComputed(ScopedComputed<?> computed) {
+        computedSignals.remove(computed);
+    }
+
+    void removeState(ReactiveNode state) {
+        stateSignals.remove(state);
     }
 
     private void closeChildren() {
         var children = snapshotArray(this.children.reversed(), Scope[]::new);
-        for (int i = children.length - 1; i >= 0; i--) {
-            children[i].close();
+        for (var child : children) {
+            child.close();
         }
+    }
+
+    void removeComputed(ReactiveNode computed) {
+        computedSignals.remove(computed);
     }
 
     private void disposeEffects() {
         var effects = snapshotArray(this.effects.reversed(), Scoped[]::new);
-        for (int i = effects.length - 1; i >= 0; i--) {
-            effects[i].dispose();
+        for (var effect : effects) {
+            effect.dispose();
         }
     }
 
     private void disposeComputedSignals() {
         var computed = snapshotArray(this.computedSignals.reversed(), Scoped[]::new);
-        for (int i = computed.length - 1; i >= 0; i--) {
-            computed[i].dispose();
+        for (var comp : computed) {
+            comp.dispose();
         }
     }
 
     private void disposeStateSignals() {
-        var states =  snapshotArray(this.stateSignals, Scoped[]::new);
-        for (int i = states.length - 1; i >= 0; i--) {
-            states[i].dispose();
+        var states = snapshotArray(this.stateSignals, Scoped[]::new);
+        for (var state : states) {
+            state.dispose();
         }
     }
-
 }

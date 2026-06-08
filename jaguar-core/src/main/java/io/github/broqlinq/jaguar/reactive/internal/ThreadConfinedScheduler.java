@@ -1,13 +1,14 @@
 package io.github.broqlinq.jaguar.reactive.internal;
 
 import io.github.broqlinq.jaguar.reactive.Scheduler;
+import io.github.broqlinq.jaguar.reactive.SchedulerTask;
 
 import java.util.ArrayDeque;
 
 public final class ThreadConfinedScheduler implements Scheduler {
 
     private final Thread ownerThread;
-    private final ArrayDeque<Runnable> tasks = new ArrayDeque<>();
+    private final ArrayDeque<Runnable> tasks = new ArrayDeque<>(32);
     private int batchDepth = 0;
     private boolean flushing = false;
 

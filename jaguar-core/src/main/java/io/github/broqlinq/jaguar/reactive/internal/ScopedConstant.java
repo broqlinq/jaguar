@@ -10,7 +10,7 @@ final class ScopedConstant<T> extends ScopeOwned implements Signal<T> {
     private final T value;
     private boolean disposed = false;
 
-    ScopedConstant(ScopeContext context, T value) {
+    ScopedConstant(ThreadConfinedScope context, T value) {
         super(context);
         this.value = value;
     }
@@ -25,7 +25,7 @@ final class ScopedConstant<T> extends ScopeOwned implements Signal<T> {
     public <R> Signal<R> derive(Function<? super T, ? extends R> mapper) {
         Objects.requireNonNull(mapper, "mapper");
         assertReadable("Attempted read from disposed signal");
-        return context.constant(mapper.apply(value()));
+        return scope.constant(mapper.apply(value()));
     }
 
     @Override
@@ -42,6 +42,6 @@ final class ScopedConstant<T> extends ScopeOwned implements Signal<T> {
 
     @Override
     public boolean isDisposed() {
-        return disposed || context().isClosed();
+        return disposed || scope.isClosed();
     }
 }

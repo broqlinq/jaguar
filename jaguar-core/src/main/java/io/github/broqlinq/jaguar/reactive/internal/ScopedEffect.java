@@ -1,71 +1,106 @@
 package io.github.broqlinq.jaguar.reactive.internal;
 
 import io.github.broqlinq.jaguar.reactive.Effect;
+import static io.github.broqlinq.jaguar.reactive.internal.Consumer.State.*;
 
 import java.util.Objects;
 
-final class ScopedEffect extends ScopeOwned implements Effect, Observer {
+final class ScopedEffect extends ConsumerNode implements Effect {
 
-    private final SubscriptionSupport subscriptionSupport = new SubscriptionSupport();
+    private final QueueableEffect effect;
 
-    private final Runnable effect;
-    private boolean invalidated = true;
-    private boolean disposed = false;
-
-    ScopedEffect(ScopeContext context, Runnable effect) {
-        this.effect = Objects.requireNonNull(effect, "effect");
-        super(context);
+    ScopedEffect(ThreadConfinedScope context, Runnable effect) {
+        super(context, Type.EFFECT);
+        Objects.requireNonNull(effect, "effect");
+        this.effect = new QueueableEffect(effect);
+        this.state = INVALID;
     }
 
-    void run() {
-        context.batch(this::runEffect);
+    @Override
+    public void markInvalid() {
+        if (state == INVALID) {
+            return;
+        }
+        state = INVALID;
+        scheduleEffect();
     }
 
-    private void runEffect() {
-        if (isDisposed()) {
+    @Override
+    public void markStale() {
+        if (state != CLEAN) {
+            return;
+        }
+        state = STALE;
+        scheduleEffect();
+    }
+
+    @Override
+    protected void onDispose() {
+        state = CLEAN;
+        producerLinks.unlinkAll();
+        scope.removeEffect(this);
+    }
+
+    void scheduleEffect() {
+        if (isDisposed() || effect.queued) {
             return;
         }
 
-        subscriptionSupport.disposeAll();
-        subscriptionSupport.clearAll();
-
-        context.tracker().evaluate(this, effect);
-        invalidated = false;
+        effect.queued = true;
+        scope.schedule(effect);
     }
 
-    @Override
-    public void addSubscription(Disposable subscription) {
-        // null-check removed as Observable is part of internal API
-        if (subscription != Disposable.NULL) {
-            subscriptionSupport.addSubscription(subscription);
-        }
-    }
+    private final class QueueableEffect implements Runnable {
+        private final Runnable runnable;
+        private boolean queued = false;
 
-    @Override
-    public void invalidate() {
-        if (invalidated || isDisposed()) {
-            return;
-        }
-        invalidated = true;
-        context.schedule(this::runEffect);
-    }
-
-    @Override
-    public boolean isDisposed() {
-        return disposed || context.isClosed();
-    }
-
-    @Override
-    public void dispose() {
-        context.assertOwnerThread();
-
-        if (disposed) {
-            return;
+        QueueableEffect(Runnable effect) {
+            this.runnable = effect;
         }
 
-        disposed = true;
-        subscriptionSupport.disposeAll();
-        subscriptionSupport.clearAll();
-        cleanup();
+        @Override
+        public void run() {
+            queued = false;
+
+            if (state == CLEAN || isDisposed()) {
+                return;
+            }
+
+            if (state == STALE && !producerLinks.detectChanged()) {
+                state = CLEAN;
+                return;
+            }
+
+            updateEpoch();
+            boolean completed = false;
+//            scope.trackingContext().push(ScopedEffect.this);
+//            try {
+//                runnable.run();
+//                completed = true;
+//            } finally {
+//                scope.trackingContext().pop(ScopedEffect.this);
+//                if (completed) {
+//                    producerLinks.removeStale();
+//                    state = CLEAN;
+//                }
+//            }
+            if (tracking) {
+                throw new IllegalStateException("Circular dependency detected");
+            }
+            final var current = scope.currentConsumer;
+            tracking = true;
+            scope.currentConsumer = ScopedEffect.this;
+            try {
+                runnable.run();
+                completed = true;
+            } finally {
+                scope.currentConsumer = current;
+                tracking = false;
+                if (completed) {
+                    producerLinks.removeStale();
+                    state = CLEAN;
+                }
+            }
+        }
     }
 }

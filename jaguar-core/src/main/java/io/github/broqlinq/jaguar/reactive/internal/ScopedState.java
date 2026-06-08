@@ -5,125 +5,77 @@ import io.github.broqlinq.jaguar.reactive.State;
 
 import java.util.Objects;
 import java.util.function.BiPredicate;
-import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.UnaryOperator;
 
-final class ScopedState<T> extends ScopeOwned implements State<T>, Observable {
+final class ScopedState<T> extends ProducerNode implements State<T> {
 
-    private final ObserverSupport observerSupport = new ObserverSupport();
+    private final Runnable notifyTask = computedLinks::markDependentsInvalid;
 
     private final BiPredicate<? super T, ? super T> eq;
     private T value;
-    private boolean disposed = false;
 
-    ScopedState(ScopeContext context, T initialValue, BiPredicate<? super T, ? super T> eq) {
+    ScopedState(ThreadConfinedScope scope, T initialValue, BiPredicate<? super T, ? super T> eq) {
         this.value = initialValue;
         this.eq = Objects.requireNonNull(eq, "eq");
-        super(context);
+        super(scope);
     }
 
     @Override
-    public void set(T newValue) {
-        assertWritable("Attempted write to disposed signal");
+    public void set(T value) {
+        assertWritable();
+        setUnchecked(value);
+    }
 
-        if (eq.test(value, newValue)) {
+    void setUnchecked(T newValue) {
+        final T oldValue = this.value;
+        if (eq.test(oldValue, newValue)) {
             return;
         }
-
         this.value = newValue;
-        context.batch(observerSupport::invalidateAll);
+        updateVersion();
+        batchNotifyDependents();
     }
 
-    @Override
-    public void update(UnaryOperator<T> updater) {
-        Objects.requireNonNull(updater, "updater");
-        assertWritable("Attempted write to disposed signal");
-
-        var newValue = updater.apply(this.value);
-        if (eq.test(value, newValue)) {
-            return;
+    private void batchNotifyDependents() {
+        if (computedLinks().nonEmpty()) {
+            scope.batch(notifyTask);
         }
-
-        this.value = newValue;
-        context.batch(observerSupport::invalidateAll);
-    }
-
-    @Override
-    public void mutate(Consumer<T> mutator) {
-        Objects.requireNonNull(mutator, "mutator");
-        assertWritable("Attempted write to disposed signal");
-
-        mutator.accept(this.value);
-        context.batch(observerSupport::invalidateAll);
     }
 
     @Override
     public T value() {
-        assertReadable("Attempted read from disposed signal");
-        context.tracker().track(this);
+        assertReadable();
+        return valueUnchecked();
+    }
+
+    T valueUnchecked() {
+//        scope.trackingContext().track(this);
+        final var current = scope.currentConsumer;
+        if (current != null) {
+            var link = current.producerLinks().getOrCreate(this);
+            if (link.active) {
+                link.markSeen();
+            } else {
+                link.link(this, current);
+            }
+        }
         return value;
     }
 
     @Override
     public <R> Signal<R> derive(Function<? super T, ? extends R> mapper) {
+        assertReadable();
         Objects.requireNonNull(mapper, "mapper");
-        assertReadable("Attempted read from disposed signal");
-        return context.computed(() -> mapper.apply(value()));
+        return scope.computed(() -> mapper.apply(valueUnchecked()));
     }
 
     @Override
-    public <R> R transform(Function<? super T, ? extends R> mapper) {
-        Objects.requireNonNull(mapper, "mapper");
-        assertReadable("Attempted read from disposed signal");
-        return mapper.apply(value());
+    protected void onDispose() {
+        scope.removeState(this);
     }
 
     @Override
-    public Disposable subscribe(Observer observer) {
-        // null-check removed as Observer is part of private API
-        if (observerSupport.addObserver(observer)) {
-            return new Subscription(observer);
-        }
-        return Disposable.NULL;
-    }
-
-    @Override
-    public void dispose() {
-        if (disposed) {
-            return;
-        }
-        disposed = true;
-        observerSupport.clearAll();
-        value = null;
-        cleanup();
-    }
-
-    @Override
-    public boolean isDisposed() {
-        return disposed || context().isClosed();
-    }
-
-    private class Subscription implements Disposable {
-        private final Observer observer;
-        private boolean disposed = false;
-
-        Subscription(Observer observer) {
-            this.observer = observer;
-        }
-
-        @Override
-        public boolean isDisposed() {
-            return disposed;
-        }
-
-        @Override
-        public void dispose() {
-            if (disposed) {
-                return;
-            }
-            disposed = true;
-            observerSupport.removeObserver(observer);
-        }
+    public ConsumerList effectLinks() {
+        return null;
     }
 }

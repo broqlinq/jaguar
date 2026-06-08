@@ -1,25 +1,27 @@
 package io.github.broqlinq.jaguar.reactive.internal;
 
+import io.github.broqlinq.jaguar.reactive.Scope;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 abstract class ScopeOwned implements Scoped {
 
-    protected final ScopeContext context;
+    protected final ThreadConfinedScope scope;
     protected final List<Runnable> cleanup = new ArrayList<>(1);
 
-    public ScopeOwned(ScopeContext context) {
-        this.context = Objects.requireNonNull(context, "context");
+    public ScopeOwned(ThreadConfinedScope scope) {
+        this.scope = Objects.requireNonNull(scope, "context");
     }
 
     @Override
-    public ScopeContext context() {
-        return context;
+    public Scope scope() {
+        return scope;
     }
 
     public boolean isDisposed() {
-        return context.isClosed();
+        return scope.isClosed();
     }
 
     protected void assertNotDisposed(String message) {
@@ -29,12 +31,12 @@ abstract class ScopeOwned implements Scoped {
     }
 
     protected void assertReadable(String message) {
-        context.assertOwnerThread();
+        scope.assertOwnerThread();
         assertNotDisposed(message);
     }
 
     protected void assertWritable(String message) {
-        context.assertOwnerThread();
+        scope.assertOwnerThread();
         assertNotDisposed(message);
     }
 

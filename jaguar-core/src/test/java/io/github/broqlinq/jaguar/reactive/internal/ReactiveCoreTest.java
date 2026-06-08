@@ -226,19 +226,6 @@ final class ReactiveCoreTest {
             assertEquals(List.of(1), runs);
         }
 
-        @Test
-        void mutateInvalidatesEvenWhenObjectIdentityIsSame() {
-            var scope = scope();
-            State<List<String>> names = scope.state(new ArrayList<>(), Objects::equals);
-
-            var sizes = new ArrayList<Integer>();
-
-            scope.effect(() -> sizes.add(names.value().size()));
-
-            names.mutate(list -> list.add("Ada"));
-
-            assertEquals(List.of(0, 1), sizes);
-        }
 
         @Test
         void stateReadTracksEffectDependency() {

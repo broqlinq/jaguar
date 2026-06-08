@@ -1,0 +1,1976 @@
+// Begin Effect.java
+
+package io.github.broqlinq.jaguar.reactive;
+
+public interface Effect  {
+
+    boolean isDisposed();
+
+    void dispose();
+}
+
+// End Effect.java
+
+// Begin Consumer.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+interface Consumer {
+
+    void invalidate();
+
+    long epoch();
+
+    ProducerList producerLinks();
+
+    boolean isTracking();
+
+    void setTracking(boolean tracking);
+}
+
+// End Consumer.java
+
+// Begin ConsumerList.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import java.util.Arrays;
+
+final class ConsumerList {
+
+    private final Producer producer;
+
+    private Link[] links = Link.EMPTY_LIST;
+    private int size = 0;
+
+    public ConsumerList(Producer producer) {
+        this.producer = producer;
+    }
+
+    public void add(Link link) {
+        if (updateIfPresent(link)) {
+            return;
+        }
+
+        final int len = links.length;
+        final int index = this.size;
+
+        if (len == 0) {
+            links = new Link[2];
+        } else if (index == len) {
+            int growth = len < 64 ? len : len >> 1;
+            links = Arrays.copyOf(links, len + growth);
+        }
+
+        links[index] = link;
+        this.size = index + 1;
+        link.producer = producer;
+        link.indexInProducer = index;
+    }
+
+    private boolean updateIfPresent(Link link) {
+        final int index = link.indexInProducer;
+        if (index == -1) {
+            return false;
+        }
+        if (links[index] != link) {
+            throw new IllegalArgumentException("Corrupted link list in producer");
+        }
+        link.markSeen();
+        return true;
+    }
+
+    public void remove(Link link) {
+        final int size = this.size;
+        final int index = link.indexInProducer;
+        var removed = links[index];
+        if (removed != link) {
+            throw new IllegalArgumentException("Corrupted link list in producer");
+        }
+        var moved = links[size - 1];
+
+        links[size - 1] = null;
+
+        if (index != size - 1) {
+            links[index] = moved;
+            moved.indexInProducer = index;
+        }
+
+        this.size = size - 1;
+    }
+
+    public boolean nonEmpty() {
+        return size != 0;
+    }
+
+    public void notifyDependents() {
+        for (int i = 0; i < size; i++) {
+            links[i].invalidate();
+        }
+    }
+
+    public void unlinkAll() {
+        for (int i = size - 1; i >= 0; i--) {
+            var link = links[i];
+            link.unlink();
+        }
+    }
+}
+
+// End ConsumerList.java
+
+// Begin ConsumerNode.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+non-sealed abstract class ConsumerNode extends ReactiveNode implements Consumer {
+
+    protected final ProducerList producerLinks = new ProducerList(this);
+    protected long epoch;
+    protected boolean invalidated;
+    protected boolean tracking;
+
+    protected ConsumerNode(ThreadConfinedScope scope) {
+        super(scope);
+    }
+
+    @Override
+    public long epoch() {
+        return epoch;
+    }
+
+    @Override
+    public ProducerList producerLinks() {
+        return producerLinks;
+    }
+
+    protected void updateEpoch() {
+        epoch++;
+    }
+
+    @Override
+    public boolean isTracking() {
+        return tracking;
+    }
+
+    @Override
+    public void setTracking(boolean tracking) {
+        this.tracking = tracking;
+    }
+}
+
+// End ConsumerNode.java
+
+// Begin Disposable.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+public interface Disposable {
+
+    static Disposable NULL = new Disposable() {
+
+        @Override
+        public boolean isDisposed() {
+            return true;
+        }
+
+        @Override
+        public void dispose() {
+        }
+    };
+
+    boolean isDisposed();
+
+    void dispose();
+
+}
+
+// End Disposable.java
+
+// Begin Link.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+final class Link {
+
+    static final Link[] EMPTY_LIST = new Link[0];
+
+    Producer producer;
+    Consumer consumer;
+
+    long lastVersion;
+    long lastEpoch;
+
+    int indexInProducer;
+    int indexInConsumer;
+
+    boolean active;
+
+    Link() {
+        clear();
+    }
+
+    void invalidate() {
+        if (producer.version() != lastVersion) {
+            consumer.invalidate();
+        }
+    }
+
+    void markSeen() {
+        this.lastVersion = producer.version();
+        this.lastEpoch = consumer.epoch();
+    }
+
+    public void link(Producer producer, Consumer consumer) {
+        this.producer = producer;
+        this.consumer = consumer;
+
+        producer.consumerLinks().add(this);
+        consumer.producerLinks().add(this);
+
+        markSeen();
+
+        active = true;
+    }
+
+    public void unlink() {
+        if (!active) {
+            return;
+        }
+
+        producer.consumerLinks().remove(this);
+        consumer.producerLinks().remove(this);
+
+        clear();
+    }
+
+    public void clear() {
+        active = false;
+
+        producer = null;
+        consumer = null;
+
+        lastVersion = -1;
+        lastEpoch = -1;
+
+        indexInProducer = -1;
+        indexInConsumer = -1;
+    }
+
+    @Override
+    public String toString() {
+        return "Link[" + consumer + " (" + indexInConsumer + ") -> " + producer + " (" + indexInProducer + ")]";
+    }
+}
+
+// End Link.java
+
+// Begin Producer.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+interface Producer {
+
+    long version();
+
+    ConsumerList consumerLinks();
+}
+
+// End Producer.java
+
+// Begin ProducerConsumerNode.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+abstract non-sealed class ProducerConsumerNode extends ReactiveNode implements Producer, Consumer {
+
+    protected final ConsumerList consumerLinks = new ConsumerList(this);
+    protected final ProducerList producerLinks = new ProducerList(this);
+    protected long version;
+    protected long epoch;
+    protected boolean invalidated;
+    protected boolean tracking;
+
+    protected ProducerConsumerNode(ThreadConfinedScope scope) {
+        super(scope);
+    }
+
+    @Override
+    public long version() {
+        return version;
+    }
+
+    @Override
+    public ConsumerList consumerLinks() {
+        return consumerLinks;
+    }
+
+    protected final void updateVersion() {
+        version++;
+    }
+
+    protected final void notifyDependents() {
+        consumerLinks.notifyDependents();
+    }
+
+    @Override
+    protected void onDispose() {
+        consumerLinks.unlinkAll();
+    }
+
+    @Override
+    public long epoch() {
+        return epoch;
+    }
+
+    @Override
+    public ProducerList producerLinks() {
+        return producerLinks;
+    }
+
+    protected void updateEpoch() {
+        epoch++;
+    }
+
+    @Override
+    public boolean isTracking() {
+        return tracking;
+    }
+
+    @Override
+    public void setTracking(boolean tracking) {
+        this.tracking = tracking;
+    }
+}
+
+// End ProducerConsumerNode.java
+
+// Begin ProducerList.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.IdentityHashMap;
+
+final class ProducerList {
+
+    private final ArrayDeque<Link> pool = new ArrayDeque<>();
+    private final IdentityHashMap<Producer, Link> producerLinks = new IdentityHashMap<>();
+    private Link[] links = Link.EMPTY_LIST;
+    private int size = 0;
+
+    private final Consumer consumer;
+
+    public ProducerList(Consumer consumer) {
+        this.consumer = consumer;
+        for (int i = 0; i < 128; i++) {
+            pool.offer(new Link());
+        }
+    }
+
+    public Link getOrCreate(Producer producer) {
+        Link link;
+        if (size > 32) {
+            link = producerLinks.get(producer);
+        } else {
+            link = null;
+            for (int i = 0; i < size; i++) {
+                if (links[i].producer == producer) {
+                    link = links[i];
+                    break;
+                }
+            }
+        }
+        if (link != null) {
+            return link;
+        }
+
+        link = pool.poll();
+        if (link == null) {
+            link = new Link();
+        }
+        return link;
+    }
+
+    public void add(Link link) {
+        if (updateIfPresent(link)) {
+            return;
+        }
+
+        final int len = links.length;
+        final int size = this.size;
+
+        if (size == len) {
+            int length = len == 0 ? 4 : len + (len >> 1);
+            links = Arrays.copyOf(links, length);
+        }
+
+        links[size] = link;
+        this.size = size + 1;
+        link.consumer = consumer;
+        link.indexInConsumer = size;
+        producerLinks.put(link.producer, link);
+    }
+
+    private boolean updateIfPresent(Link link) {
+        final int index = link.indexInConsumer;
+        if (index == -1) {
+            return false;
+        }
+        if (links[index] != link) {
+            throw new IllegalArgumentException("Corrupted link list in producer");
+        }
+        link.markSeen();
+        return true;
+    }
+
+    public void remove(Link link) {
+        final int size = this.size;
+        final int index = link.indexInConsumer;
+        var removed = links[index];
+        if (removed != link) {
+            throw new IllegalArgumentException("Corrupted link list in consumer: " + link);
+        }
+        var moved = links[size - 1];
+
+        links[size - 1] = null;
+
+        if (index != size - 1) {
+            links[index] = moved;
+            moved.indexInConsumer = index;
+        }
+        this.size = size - 1;
+        producerLinks.remove(link.producer);
+    }
+
+    public void removeStale() {
+        final int len = size;
+        for (int i = len - 1; i >= 0; i--) {
+            var link = links[i];
+            if (link.lastEpoch != consumer.epoch()) {
+//                links[i] = null;
+                producerLinks.remove(link.producer);
+                link.unlink();
+                pool.offer(link);
+            }
+        }
+
+    }
+
+    public void unlinkAll() {
+        for (int i = size - 1; i >= 0; i--) {
+            links[i].unlink();
+        }
+    }
+}
+
+// End ProducerList.java
+
+// Begin ProducerNode.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+non-sealed abstract class ProducerNode extends ReactiveNode implements Producer {
+
+    protected final ConsumerList consumerLinks = new ConsumerList(this);
+    protected long version;
+
+    protected ProducerNode(ThreadConfinedScope scope) {
+        super(scope);
+    }
+
+    @Override
+    public long version() {
+        return version;
+    }
+
+    @Override
+    public ConsumerList consumerLinks() {
+        return consumerLinks;
+    }
+
+    protected final void updateVersion() {
+        version++;
+    }
+
+    protected final void notifyDependents() {
+        consumerLinks.notifyDependents();
+    }
+
+    @Override
+    protected void onDispose() {
+        consumerLinks.unlinkAll();
+    }
+}
+
+// End ProducerNode.java
+
+// Begin ReactiveNode.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.Scope;
+
+sealed abstract class ReactiveNode implements Scoped permits ConsumerNode, ProducerConsumerNode, ProducerNode, ScopedIntConstant {
+
+    protected final ThreadConfinedScope scope;
+    private boolean disposed;
+
+    protected ReactiveNode(ThreadConfinedScope scope) {
+        this.scope = scope;
+    }
+
+    @Override
+    public Scope scope() {
+        return scope;
+    }
+
+    public boolean isDisposed() {
+        return disposed || scope.isClosed();
+    }
+
+    public final void dispose() {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+        onDispose();
+    }
+
+    protected void onDispose() {}
+
+    protected final void assertReadable() {
+        scope.assertOwnerThread();
+
+        if (isDisposed()) {
+            throw new IllegalStateException("Attempted read from disposed node");
+        }
+    }
+
+    protected final void assertWritable() {
+        scope.assertOwnerThread();
+
+        if (isDisposed()) {
+            throw new IllegalStateException("Attempted write to disposed node");
+        }
+    }
+}
+
+// End ReactiveNode.java
+
+// Begin ScopeContext.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.Effect;
+import io.github.broqlinq.jaguar.reactive.SchedulerTask;
+import io.github.broqlinq.jaguar.reactive.Signal;
+import io.github.broqlinq.jaguar.reactive.State;
+
+import java.util.function.BiPredicate;
+import java.util.function.Supplier;
+
+interface ScopeContext {
+
+    <T> Signal<T> constant(T value);
+
+    <T> Signal<T> computed(Supplier<? extends T> supplier);
+
+    <T> State<T> state(T initialValue, BiPredicate<? super T, ? super T> eq);
+
+    Effect effect(Runnable eff);
+
+    boolean isClosed();
+
+    void batch(Runnable batch);
+
+    void schedule(Runnable task);
+
+    void assertOwnerThread();
+}
+
+// End ScopeContext.java
+
+// Begin Scoped.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.Scope;
+
+public interface Scoped extends Disposable {
+
+    Scope scope();
+}
+
+// End Scoped.java
+
+// Begin ScopedComputed.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.SchedulerTask;
+import io.github.broqlinq.jaguar.reactive.Signal;
+
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
+final class ScopedComputed<T> extends ScopeOwned implements Signal<T>, Producer, Consumer, SchedulerTask {
+
+    private final ProducerList producerLinks = new ProducerList(this);
+    private final ConsumerList consumerLinks = new ConsumerList(this);
+
+    private final Supplier<? extends T> supplier;
+    private T cachedValue = null;
+
+    private boolean invalidated = true;
+    private boolean disposed = false;
+    private long version = 0;
+    private long epoch = 0;
+    private boolean queued = false;
+    private boolean tracking;
+
+    ScopedComputed(ThreadConfinedScope context, Supplier<? extends T> supplier) {
+        this.supplier = Objects.requireNonNull(supplier, "supplier");
+        super(context);
+    }
+
+    @Override
+    public T value() {
+        assertReadable("Attempted read from disposed signal");
+
+        scope.trackingContext().track(this);
+
+        recomputeIfNeeded();
+
+        return cachedValue;
+    }
+
+    private void recomputeIfNeeded() {
+        if (!invalidated) {
+            return;
+        }
+
+        epoch++;
+        T newValue;
+        scope.trackingContext().push(this);
+        try {
+            newValue = supplier.get();
+        } finally {
+            scope.trackingContext().pop(this);
+        }
+
+        // TODO: Do proper equality check, identity check for now
+        if (cachedValue != newValue) {
+            cachedValue = newValue;
+            version++;
+        }
+
+        producerLinks.removeStale();
+
+        invalidated = false;
+
+        scope.batch(this);
+    }
+
+    @Override
+    public <R> Signal<R> derive(Function<? super T, ? extends R> mapper) {
+        Objects.requireNonNull(mapper, "mapper");
+        assertReadable("Attempted read from disposed signal");
+        return scope.computed(() -> mapper.apply(value()));
+    }
+
+    @Override
+    public <R> R transform(Function<? super T, ? extends R> mapper) {
+        Objects.requireNonNull(mapper, "mapper");
+        assertReadable("Attempted read from disposed signal");
+        return mapper.apply(value());
+    }
+
+    @Override
+    public void dispose() {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+
+        consumerLinks.unlinkAll();
+        scope.removeComputed(this);
+    }
+
+    @Override
+    public boolean isDisposed() {
+        return disposed || scope.isClosed();
+    }
+
+    @Override
+    public long version() {
+        return version;
+    }
+
+    @Override
+    public ConsumerList consumerLinks() {
+        return consumerLinks;
+    }
+
+    @Override
+    public void invalidate() {
+        if (invalidated) {
+            return;
+        }
+        invalidated = true;
+        queued = true;
+        scope.batch(this);
+    }
+
+    @Override
+    public long epoch() {
+        return epoch;
+    }
+
+    @Override
+    public ProducerList producerLinks() {
+        return producerLinks;
+    }
+
+    @Override
+    public boolean isTracking() {
+        return tracking;
+    }
+
+    @Override
+    public void setTracking(boolean tracking) {
+        this.tracking = tracking;
+    }
+
+    @Override
+    public void execute() {
+        queued = false;
+        consumerLinks.notifyDependents();
+    }
+}
+
+// End ScopedComputed.java
+
+// Begin ScopedConstant.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.Signal;
+
+import java.util.Objects;
+import java.util.function.Function;
+
+final class ScopedConstant<T> extends ScopeOwned implements Signal<T> {
+
+    private final T value;
+    private boolean disposed = false;
+
+    ScopedConstant(ThreadConfinedScope context, T value) {
+        super(context);
+        this.value = value;
+    }
+
+    @Override
+    public T value() {
+        assertReadable("Attempted read from disposed signal");
+        return value;
+    }
+
+    @Override
+    public <R> Signal<R> derive(Function<? super T, ? extends R> mapper) {
+        Objects.requireNonNull(mapper, "mapper");
+        assertReadable("Attempted read from disposed signal");
+        return scope.constant(mapper.apply(value()));
+    }
+
+    @Override
+    public <R> R transform(Function<? super T, ? extends R> mapper) {
+        Objects.requireNonNull(mapper, "mapper");
+        assertReadable("Attempted transform from disposed signal");
+        return mapper.apply(value());
+    }
+
+    @Override
+    public void dispose() {
+        disposed = true;
+    }
+
+    @Override
+    public boolean isDisposed() {
+        return disposed || scope.isClosed();
+    }
+}
+
+// End ScopedConstant.java
+
+// Begin ScopedEffect.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.Effect;
+
+import java.util.Objects;
+
+final class ScopedEffect extends ConsumerNode implements Effect {
+
+    private final QueueableEffect effect;
+
+    ScopedEffect(ThreadConfinedScope context, Runnable effect) {
+        super(context);
+        Objects.requireNonNull(effect, "effect");
+        this.effect = new QueueableEffect(effect);
+        this.invalidated = true;
+    }
+
+    @Override
+    public void invalidate() {
+        if (invalidated) {
+            return;
+        }
+        invalidated = true;
+        scheduleEffect();
+    }
+
+    @Override
+    protected void onDispose() {
+        invalidated = false;
+        producerLinks.unlinkAll();
+        scope.removeEffect(this);
+    }
+
+    void scheduleEffect() {
+        if (isDisposed() || effect.queued) {
+            return;
+        }
+
+        effect.queued = true;
+        scope.schedule(effect);
+    }
+
+    private final class QueueableEffect implements Runnable {
+        private final Runnable runnable;
+        private boolean queued = false;
+
+        QueueableEffect(Runnable effect) {
+            this.runnable = effect;
+        }
+
+        @Override
+        public void run() {
+            queued = false;
+
+            if (!invalidated || isDisposed()) {
+                return;
+            }
+
+            updateEpoch();
+            boolean completed = false;
+            scope.trackingContext().push(ScopedEffect.this);
+            try {
+                runnable.run();
+                completed = true;
+            } finally {
+                scope.trackingContext().pop(ScopedEffect.this);
+                if (completed) {
+                    producerLinks.removeStale();
+                    invalidated = false;
+                }
+            }
+        }
+    }
+}
+
+// End ScopedEffect.java
+
+// Begin ScopedIntComputed.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.IntSignal;
+import io.github.broqlinq.jaguar.reactive.Signal;
+
+import java.util.Objects;
+import java.util.function.IntFunction;
+import java.util.function.IntSupplier;
+import java.util.function.IntUnaryOperator;
+
+final class ScopedIntComputed extends ProducerConsumerNode implements IntSignal {
+
+    private final Runnable batchTask = consumerLinks::notifyDependents;
+
+    private final IntSupplier supplier;
+    private int cachedValue;
+
+    ScopedIntComputed(ThreadConfinedScope scope, IntSupplier supplier) {
+        this.supplier = Objects.requireNonNull(supplier, "supplier");
+        super(scope);
+        this.invalidated = true;
+    }
+
+    @Override
+    public int intValue() {
+        assertReadable();
+        return valueUnchecked();
+    }
+
+    private int valueUnchecked() {
+        scope.trackingContext().track(this);
+        if (invalidated) {
+            recompute();
+        }
+        return cachedValue;
+    }
+
+    private void recompute() {
+        updateEpoch();
+        int newValue;
+        scope.trackingContext().push(this);
+        try {
+            newValue = supplier.getAsInt();
+        } finally {
+            scope.trackingContext().pop(this);
+        }
+        final int oldValue = cachedValue;
+        if (oldValue != newValue) {
+            cachedValue = newValue;
+            updateVersion();
+        }
+
+        producerLinks.removeStale();
+        invalidated = false;
+
+        batchNotifyDependents();
+    }
+
+    private void batchNotifyDependents() {
+        if (consumerLinks().nonEmpty()) {
+            scope.batch(batchTask);
+        }
+    }
+
+    @Override
+    public <R> Signal<R> derive(IntFunction<? extends R> mapper) {
+        assertReadable();
+        Objects.requireNonNull(mapper, "mapper");
+        return scope.computed(() -> mapper.apply(valueUnchecked()));
+    }
+
+    @Override
+    public IntSignal deriveInt(IntUnaryOperator mapper) {
+        assertReadable();
+        Objects.requireNonNull(mapper, "mapper");
+        return scope.computedInt(() -> mapper.applyAsInt(valueUnchecked()));
+    }
+
+    @Override
+    public void invalidate() {
+        if (invalidated) {
+            return;
+        }
+        invalidated = true;
+        batchNotifyDependents();
+    }
+
+    @Override
+    protected void onDispose() {
+        invalidated = false;
+        consumerLinks.unlinkAll();
+        producerLinks.unlinkAll();
+        scope.removeComputed(this);
+    }
+}
+
+// End ScopedIntComputed.java
+
+// Begin ScopedIntConstant.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.IntSignal;
+import io.github.broqlinq.jaguar.reactive.Signal;
+
+import java.util.function.IntFunction;
+import java.util.function.IntUnaryOperator;
+
+final class ScopedIntConstant extends ReactiveNode implements IntSignal {
+
+    private final int value;
+
+    ScopedIntConstant(ThreadConfinedScope scope, int value) {
+        super(scope);
+        this.value = value;
+    }
+
+    @Override
+    public int intValue() {
+        assertReadable();
+        return value;
+    }
+
+    @Override
+    public <R> Signal<R> derive(IntFunction<? extends R> mapper) {
+        assertReadable();
+        return scope.computed(() -> mapper.apply(value));
+    }
+
+    @Override
+    public IntSignal deriveInt(IntUnaryOperator mapper) {
+        assertReadable();
+        return scope.intConstant(mapper.applyAsInt(value));
+    }
+}
+
+// End ScopedIntConstant.java
+
+// Begin ScopedIntState.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.IntSignal;
+import io.github.broqlinq.jaguar.reactive.IntState;
+import io.github.broqlinq.jaguar.reactive.Signal;
+
+import java.util.function.IntFunction;
+import java.util.function.IntUnaryOperator;
+
+final class ScopedIntState extends ProducerNode implements IntState {
+
+    private int value;
+
+    ScopedIntState(ThreadConfinedScope scope) {
+        super(scope);
+    }
+
+    ScopedIntState(ThreadConfinedScope scope, int initial) {
+        super(scope);
+        this.value = initial;
+    }
+
+    @Override
+    public void set(int value) {
+        assertWritable();
+        setUnchecked(value);
+    }
+
+    private void setUnchecked(int newValue) {
+        int oldValue = this.value;
+        if (oldValue == newValue) {
+            return;
+        }
+        this.value = newValue;
+        updateVersion();
+        notifyDependents();
+    }
+
+    @Override
+    public void update(IntUnaryOperator updater) {
+        assertWritable();
+        final int newValue = updater.applyAsInt(value);
+        setUnchecked(newValue);
+    }
+
+    @Override
+    public int intValue() {
+        assertReadable();
+        return valueUnchecked();
+    }
+
+    private int valueUnchecked() {
+        scope.trackingContext().track(this);
+        return value;
+    }
+
+    @Override
+    public <R> Signal<R> derive(IntFunction<? extends R> mapper) {
+        assertReadable();
+        return scope.computed(() -> mapper.apply(valueUnchecked()));
+    }
+
+    @Override
+    public IntSignal deriveInt(IntUnaryOperator mapper) {
+        assertReadable();
+        return scope.computedInt(() -> mapper.applyAsInt(valueUnchecked()));
+    }
+}
+
+// End ScopedIntState.java
+
+// Begin ScopedState.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.Signal;
+import io.github.broqlinq.jaguar.reactive.State;
+
+import java.util.Objects;
+import java.util.function.BiPredicate;
+import java.util.function.Function;
+
+final class ScopedState<T> extends ProducerNode implements State<T> {
+
+    private final Runnable notifyTask = consumerLinks::notifyDependents;
+
+    private final BiPredicate<? super T, ? super T> eq;
+    private T value;
+
+    ScopedState(ThreadConfinedScope scope, T initialValue, BiPredicate<? super T, ? super T> eq) {
+        this.value = initialValue;
+        this.eq = Objects.requireNonNull(eq, "eq");
+        super(scope);
+    }
+
+    @Override
+    public void set(T value) {
+        assertWritable();
+        setUnchecked(value);
+    }
+
+    void setUnchecked(T newValue) {
+        final T oldValue = this.value;
+        if (eq.test(oldValue, newValue)) {
+            return;
+        }
+        this.value = newValue;
+        updateVersion();
+        batchNotifyDependents();
+    }
+
+    private void batchNotifyDependents() {
+        if (consumerLinks().nonEmpty()) {
+            scope.batch(notifyTask);
+        }
+    }
+
+    @Override
+    public T value() {
+        assertReadable();
+        return valueUnchecked();
+    }
+
+    T valueUnchecked() {
+        scope.trackingContext().track(this);
+        return value;
+    }
+
+    @Override
+    public <R> Signal<R> derive(Function<? super T, ? extends R> mapper) {
+        assertReadable();
+        Objects.requireNonNull(mapper, "mapper");
+        return scope.computed(() -> mapper.apply(valueUnchecked()));
+    }
+
+    @Override
+    protected void onDispose() {
+        scope.removeState(this);
+    }
+}
+
+// End ScopedState.java
+
+// Begin ScopeOwned.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.Scope;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+abstract class ScopeOwned implements Scoped {
+
+    protected final ThreadConfinedScope scope;
+    protected final List<Runnable> cleanup = new ArrayList<>(1);
+
+    public ScopeOwned(ThreadConfinedScope scope) {
+        this.scope = Objects.requireNonNull(scope, "context");
+    }
+
+    @Override
+    public Scope scope() {
+        return scope;
+    }
+
+    public boolean isDisposed() {
+        return scope.isClosed();
+    }
+
+    protected void assertNotDisposed(String message) {
+        if (isDisposed()) {
+            throw new IllegalStateException(message);
+        }
+    }
+
+    protected void assertReadable(String message) {
+        scope.assertOwnerThread();
+        assertNotDisposed(message);
+    }
+
+    protected void assertWritable(String message) {
+        scope.assertOwnerThread();
+        assertNotDisposed(message);
+    }
+
+    protected final void onDispose(Runnable cleanup) {
+        this.cleanup.add(cleanup);
+    }
+
+    protected final void cleanup() {
+        Throwable fail = null;
+        for (var cleanup : cleanup) {
+            try {
+                cleanup.run();
+            } catch (Throwable ex) {
+                if (fail == null) {
+                    fail = ex;
+                } else {
+                    fail.addSuppressed(ex);
+                }
+            }
+        }
+        if (fail != null) {
+            throw new RuntimeException(fail);
+        }
+    }
+}
+
+// End ScopeOwned.java
+
+// Begin ThreadConfinedScheduler.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.Scheduler;
+import io.github.broqlinq.jaguar.reactive.SchedulerTask;
+
+import java.util.ArrayDeque;
+
+public final class ThreadConfinedScheduler implements Scheduler {
+
+    private final Thread ownerThread;
+    private final ArrayDeque<Runnable> tasks = new ArrayDeque<>(32);
+    private int batchDepth = 0;
+    private boolean flushing = false;
+
+    public ThreadConfinedScheduler(Thread ownerThread) {
+        this.ownerThread = ownerThread;
+    }
+
+    @Override
+    public boolean isOwnerThread() {
+        return Thread.currentThread() == ownerThread;
+    }
+
+    @Override
+    public void schedule(Runnable task) {
+        assertOwnerThread("Attempted to schedule task on non-owner thread");
+
+        tasks.offerLast(task);
+
+        if (batchDepth == 0) {
+            flush();
+        }
+    }
+
+    @Override
+    public void batch(Runnable task) {
+        assertOwnerThread("Attempted to batch task on non-owner thread");
+
+        batchDepth++;
+
+        boolean completed = false;
+        try {
+            task.run();
+            completed = true;
+        } finally {
+            batchDepth--;
+            if (batchDepth == 0 && completed) {
+                flush();
+            }
+        }
+    }
+
+    private void assertOwnerThread(String message) {
+        if (!isOwnerThread()) {
+            throw new WrongThreadException(message);
+        }
+    }
+
+    private void flush() {
+        if (flushing) {
+            return;
+        }
+
+        flushing = true;
+        try {
+            Runnable task;
+            while ((task = tasks.pollFirst()) != null) {
+                task.run();
+            }
+        } finally {
+            flushing = false;
+        }
+    }
+}
+
+// End ThreadConfinedScheduler.java
+
+// Begin ThreadConfinedScope.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import io.github.broqlinq.jaguar.reactive.*;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.function.BiPredicate;
+import java.util.function.IntFunction;
+import java.util.function.IntSupplier;
+import java.util.function.Supplier;
+
+public final class ThreadConfinedScope implements Scope, ScopeContext {
+
+    private final String name;
+
+    private final Scope parent;
+
+    private final ArrayList<Scope> children = new ArrayList<>();
+
+    private final Scheduler scheduler;
+
+    private final TrackingContext tracker = new TrackingContext();
+
+    private final LinkedHashSet<Scoped> effects = new LinkedHashSet<>();
+    private final LinkedHashSet<Scoped> computedSignals = new LinkedHashSet<>();
+    private final LinkedHashSet<Scoped> stateSignals = new LinkedHashSet<>();
+    private final Runnable cleanup;
+    private boolean closed = false;
+    private boolean closing = false;
+
+    public ThreadConfinedScope(String name, Scheduler scheduler) {
+        this(name, null, scheduler);
+    }
+
+    public ThreadConfinedScope(String name, Scope parent, Scheduler scheduler) {
+        this.name = normalize(name);
+        this.parent = parent;
+        this.scheduler = scheduler;
+        this.cleanup = () -> {
+        };
+    }
+
+    private ThreadConfinedScope(String name, Scope parent, Scheduler scheduler, Runnable cleanup) {
+        this.name = name;
+        this.parent = parent;
+        this.scheduler = scheduler;
+        this.cleanup = cleanup;
+    }
+
+    private static String normalize(String name) {
+        if (name == null || name.isBlank()) {
+            return "<unnamed-scope>";
+        }
+        return name;
+    }
+
+    private static <T> T[] snapshotArray(Collection<? extends T> collection, IntFunction<T[]> arraySupplier) {
+        return collection.toArray(arraySupplier);
+    }
+
+    public static Scope create(String name) {
+        return new ThreadConfinedScope(name, new ThreadConfinedScheduler(Thread.currentThread()));
+    }
+
+    @Override
+    public String name() {
+        return name;
+    }
+
+    @Override
+    public Scope child(String name) {
+        assertAccess();
+
+        var scope = new ThreadConfinedScope(name, this, scheduler);
+        children.add(scope);
+        return scope;
+    }
+
+    @Override
+    public Scheduler scheduler() {
+        assertAccess();
+
+        return scheduler;
+    }
+
+    @Override
+    public <T> Signal<T> constant(T value) {
+        assertAccess();
+
+        return new ScopedConstant<>(this, value);
+    }
+
+    @Override
+    public IntSignal intConstant(int value) {
+        assertAccess();
+        return new ScopedIntConstant(this, value);
+    }
+
+    @Override
+    public <T> Signal<T> computed(Supplier<? extends T> supplier) {
+        assertAccess();
+
+        var computed = new ScopedComputed<T>(this, supplier);
+        computedSignals.add(computed);
+//        computed.onDispose(() -> computedSignals.remove(computed));
+        return computed;
+    }
+
+    @Override
+    public <T> Signal<T> computed(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> eq) {
+        // Ignore for now, return regular computed signal
+        return computed(supplier);
+    }
+
+    @Override
+    public IntSignal computedInt(IntSupplier supplier) {
+        assertAccess();
+        var computedInt = new ScopedIntComputed(this, supplier);
+        computedSignals.add(computedInt);
+        return computedInt;
+    }
+
+    @Override
+    public <T> State<T> state(T initial, BiPredicate<? super T, ? super T> eq) {
+        assertAccess();
+
+        var state = new ScopedState<>(this, initial, eq);
+        stateSignals.add(state);
+        return state;
+    }
+
+    @Override
+    public IntState intState(int initial) {
+        assertAccess();
+        var intState = new ScopedIntState(this, initial);
+        stateSignals.add(intState);
+        return intState;
+    }
+
+    @Override
+    public Effect effect(Runnable eff) {
+        assertAccess();
+
+        var effect = new ScopedEffect(this, eff);
+        effects.add(effect);
+        effect.scheduleEffect();
+        return effect;
+    }
+
+    @Override
+    public boolean isClosed() {
+        var closed = this.closed;
+        if (parent != null) {
+            closed |= parent.isClosed();
+        }
+        return closed;
+    }
+
+    TrackingContext trackingContext() {
+        assertOpen();
+        return tracker;
+    }
+
+    @Override
+    public void assertOwnerThread() {
+        if (!scheduler.isOwnerThread()) {
+            throw new WrongThreadException("Attempted access from non-parent thread in scope '" + name + "'");
+        }
+    }
+
+    @Override
+    public void batch(Runnable task) {
+        assertOpen();
+        scheduler.batch(task);
+    }
+
+    @Override
+    public void schedule(Runnable task) {
+        assertOpen();
+        scheduler.schedule(task);
+    }
+
+    private void assertOpen() {
+        if (isClosed()) {
+            throw new IllegalStateException("Attempted to access closed scope '" + name + "'");
+        }
+    }
+
+    private void assertAccess() {
+        assertOwnerThread();
+        assertOpen();
+    }
+
+    @Override
+    public void close() {
+        assertOwnerThread();
+
+        if (closed || closing) {
+            return;
+        }
+
+        closing = true;
+
+        try {
+            closeChildren();
+            disposeEffects();
+            disposeComputedSignals();
+            disposeStateSignals();
+//            cleanup.run();
+            if (parent != null) {
+                ((ThreadConfinedScope) parent).children.remove(this);
+            }
+            closed = true;
+        } finally {
+            closing = true;
+        }
+    }
+
+    void removeEffect(ReactiveNode effect) {
+        effects.remove(effect);
+    }
+
+    void removeComputed(ScopedComputed<?> computed) {
+        computedSignals.remove(computed);
+    }
+
+    void removeState(ReactiveNode state) {
+        stateSignals.remove(state);
+    }
+
+    private void closeChildren() {
+        var children = snapshotArray(this.children.reversed(), Scope[]::new);
+        for (int i = children.length - 1; i >= 0; i--) {
+            children[i].close();
+        }
+    }
+
+    void removeComputed(ReactiveNode computed) {
+        computedSignals.remove(computed);
+    }
+
+    private void disposeEffects() {
+        var effects = snapshotArray(this.effects.reversed(), Scoped[]::new);
+        for (int i = effects.length - 1; i >= 0; i--) {
+            effects[i].dispose();
+        }
+    }
+
+    private void disposeComputedSignals() {
+        var computed = snapshotArray(this.computedSignals.reversed(), Scoped[]::new);
+        for (int i = computed.length - 1; i >= 0; i--) {
+            computed[i].dispose();
+        }
+    }
+
+    private void disposeStateSignals() {
+        var states = snapshotArray(this.stateSignals, Scoped[]::new);
+        for (int i = states.length - 1; i >= 0; i--) {
+            states[i].dispose();
+        }
+    }
+}
+
+// End ThreadConfinedScope.java
+
+// Begin TrackingContext.java
+
+package io.github.broqlinq.jaguar.reactive.internal;
+
+import java.util.Arrays;
+
+final class TrackingContext {
+
+    private Consumer[] stack = new Consumer[128];
+    private int size = 0;
+
+    private Consumer peek() {
+        if (size == 0) {
+            return null;
+        }
+        return stack[size - 1];
+    }
+
+    public void track(Producer producer) {
+        if (size > 0) {
+            var consumer = stack[size - 1];
+            var link = consumer.producerLinks().getOrCreate(producer);
+            if (link.active) {
+                link.markSeen();
+            } else {
+                link.link(producer, consumer);
+            }
+        }
+    }
+
+    public void push(Consumer consumer) {
+        if (consumer.isTracking()) {
+            throw new IllegalStateException("Consumer is already in tracking context, circular dependency detected");
+        }
+        if (size == stack.length) {
+            int newSize = stack.length + stack.length / 2;
+            stack = Arrays.copyOf(stack, newSize);
+        }
+        stack[size++] = consumer;
+        consumer.setTracking(true);
+    }
+
+    public void pop(Consumer expected) {
+        if (size == 0 || stack[size - 1] != expected) {
+            throw new IllegalStateException("Tracking stack corrupted");
+        }
+
+        Consumer consumer = stack[--size];
+        stack[size] = null;
+        consumer.setTracking(false);
+    }
+}
+
+// End TrackingContext.java
+
+// Begin IntSignal.java
+
+package io.github.broqlinq.jaguar.reactive;
+
+import java.util.function.IntFunction;
+import java.util.function.IntUnaryOperator;
+
+public interface IntSignal {
+
+    int intValue();
+
+    <R> Signal<R> derive(IntFunction<? extends R> mapper);
+
+    IntSignal deriveInt(IntUnaryOperator mapper);
+}
+
+// End IntSignal.java
+
+// Begin IntState.java
+
+package io.github.broqlinq.jaguar.reactive;
+
+import java.util.function.IntUnaryOperator;
+
+public interface IntState extends IntSignal {
+
+    void set(int value);
+
+    void update(IntUnaryOperator updater);
+    
+}
+
+// End IntState.java
+
+// Begin Scheduler.java
+
+package io.github.broqlinq.jaguar.reactive;
+
+public interface Scheduler {
+
+    boolean isOwnerThread();
+
+    void schedule(Runnable task);
+
+    void batch(Runnable task);
+}
+
+// End Scheduler.java
+
+// Begin SchedulerTask.java
+
+package io.github.broqlinq.jaguar.reactive;
+
+public interface SchedulerTask extends Runnable {
+
+    void execute();
+
+    default boolean isQueued() {
+        return false;
+    }
+
+    @Override
+    default void run() {
+        execute();
+    }
+}
+
+// End SchedulerTask.java
+
+// Begin Scope.java
+
+package io.github.broqlinq.jaguar.reactive;
+
+import java.util.function.BiPredicate;
+import java.util.function.IntSupplier;
+import java.util.function.Supplier;
+
+public interface Scope extends AutoCloseable {
+
+    String name();
+
+    Scope child(String name);
+
+    Scheduler scheduler();
+
+    <T> Signal<T> constant(T value);
+
+    IntSignal intConstant(int value);
+
+    <T> Signal<T> computed(Supplier<? extends T> supplier);
+
+    <T> Signal<T> computed(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> eq);
+
+    IntSignal computedInt(IntSupplier supplier);
+
+    <T> State<T> state(T initial, BiPredicate<? super T, ? super T> eq);
+
+    IntState intState(int initial);
+
+    default IntState intState() {
+        return intState(0);
+    }
+
+    Effect effect(Runnable eff);
+
+    boolean isClosed();
+
+    default void schedule(Runnable task) {
+        scheduler().schedule(task);
+    }
+
+    default void batch(Runnable task) {
+        scheduler().batch(task);
+    }
+
+    @Override
+    void close();
+}
+
+// End Scope.java
+
+// Begin Signal.java
+
+package io.github.broqlinq.jaguar.reactive;
+
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
+public interface Signal<T> extends Supplier<T> {
+
+    @Override
+    default T get() {
+        return value();
+    }
+
+    T value();
+
+    <R> Signal<R> derive(Function<? super T, ? extends R> mapper);
+
+    default <R> R transform(Function<? super T, ? extends R> mapper) {
+        Objects.requireNonNull(mapper);
+        return mapper.apply(value());
+    }
+}
+
+// End Signal.java
+
+// Begin State.java
+
+package io.github.broqlinq.jaguar.reactive;
+
+import java.util.function.UnaryOperator;
+
+public interface State<T> extends Signal<T> {
+
+    void set(T value);
+
+    default void update(UnaryOperator<T> updater) {
+        set(updater.apply(value()));
+    }
+
+}
+
+// End State.java
+
+tring name);    Scheduler scheduler();    <T> Signal<T> constant(T value);    IntSignal intConstant(int value);    <T> Signal<T> computed(Supplier<? extends T> supplier);    <T> Signal<T> computed(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> eq);    IntSignal computedInt(IntSupplier supplier);    <T> State<T> state(T initial, BiPredicate<? super T, ? super T> eq);    IntState intState(int initial);    default IntState intState() {        return intState(0);    }    Effect effect(Runnable eff);    boolean isClosed();    default void schedule(Runnable task) {        scheduler().schedule(task);    }    default void batch(Runnable task) {        scheduler().batch(task);    }    @Override    void close();}
+// End Scope.java
+
+// Begin Signal.java
+
+package io.github.broqlinq.jaguar.reactive;import java.util.Objects;import java.util.function.Function;import java.util.function.Supplier;public interface Signal<T> extends Supplier<T> {    @Override    default T get() {        return value();    }    T value();    <R> Signal<R> derive(Function<? super T, ? extends R> mapper);    default <R> R transform(Function<? super T, ? extends R> mapper) {        Objects.requireNonNull(mapper);        return mapper.apply(value());    }}
+// End Signal.java
+
+// Begin State.java
+
+package io.github.broqlinq.jaguar.reactive;import java.util.function.UnaryOperator;public interface State<T> extends Signal<T> {    void set(T value);    default void update(UnaryOperator<T> updater) {        set(updater.apply(value()));    }}
+// End State.java
+
+// Begin Effect.java
+
+package io.github.broqlinq.jaguar.reactive;public interface Effect  {    boolean isDisposed();    void dispose();}
+// End Effect.java
+
+// Begin Consumer.java
+
+package io.github.broqlinq.jaguar.reactive.internal;interface Consumer {    void invalidate();    long epoch();    ProducerList producerLinks();    boolean isTracking();    void setTracking(boolean tracking);}
+// End Consumer.java
+
+// Begin ConsumerList.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import java.util.Arrays;final class ConsumerList {    private final Producer producer;    private Link[] links = Link.EMPTY_LIST;    private int size = 0;    public ConsumerList(Producer producer) {        this.producer = producer;    }    public void add(Link link) {        if (updateIfPresent(link)) {            return;        }        final int len = links.length;        final int index = this.size;        if (len == 0) {            links = new Link[2];        } else if (index == len) {            int growth = len < 64 ? len : len >> 1;            links = Arrays.copyOf(links, len + growth);        }        links[index] = link;        this.size = index + 1;        link.producer = producer;        link.indexInProducer = index;    }    private boolean updateIfPresent(Link link) {        final int index = link.indexInProducer;        if (index == -1) {            return false;        }        if (links[index] != link) {            throw new IllegalArgumentException("Corrupted link list in producer");        }        link.markSeen();        return true;    }    public void remove(Link link) {        final int size = this.size;        final int index = link.indexInProducer;        var removed = links[index];        if (removed != link) {            throw new IllegalArgumentException("Corrupted link list in producer");        }        var moved = links[size - 1];        links[size - 1] = null;        if (index != size - 1) {            links[index] = moved;            moved.indexInProducer = index;        }        this.size = size - 1;    }    public boolean nonEmpty() {        return size != 0;    }    public void notifyDependents() {        for (int i = 0; i < size; i++) {            links[i].invalidate();        }    }    public void unlinkAll() {        for (int i = size - 1; i >= 0; i--) {            var link = links[i];            link.unlink();        }    }}
+// End ConsumerList.java
+
+// Begin ConsumerNode.java
+
+package io.github.broqlinq.jaguar.reactive.internal;non-sealed abstract class ConsumerNode extends ReactiveNode implements Consumer {    protected final ProducerList producerLinks = new ProducerList(this);    protected long epoch;    protected boolean invalidated;    protected boolean tracking;    protected ConsumerNode(ThreadConfinedScope scope) {        super(scope);    }    @Override    public long epoch() {        return epoch;    }    @Override    public ProducerList producerLinks() {        return producerLinks;    }    protected void updateEpoch() {        epoch++;    }    @Override    public boolean isTracking() {        return tracking;    }    @Override    public void setTracking(boolean tracking) {        this.tracking = tracking;    }}
+// End ConsumerNode.java
+
+// Begin Disposable.java
+
+package io.github.broqlinq.jaguar.reactive.internal;public interface Disposable {    static Disposable NULL = new Disposable() {        @Override        public boolean isDisposed() {            return true;        }        @Override        public void dispose() {        }    };    boolean isDisposed();    void dispose();}
+// End Disposable.java
+
+// Begin Link.java
+
+package io.github.broqlinq.jaguar.reactive.internal;final class Link {    static final Link[] EMPTY_LIST = new Link[0];    Producer producer;    Consumer consumer;    long lastVersion;    long lastEpoch;    int indexInProducer;    int indexInConsumer;    boolean active;    Link() {        clear();    }    void invalidate() {        if (producer.version() != lastVersion) {            consumer.invalidate();        }    }    void markSeen() {        this.lastVersion = producer.version();        this.lastEpoch = consumer.epoch();    }    public void link(Producer producer, Consumer consumer) {        this.producer = producer;        this.consumer = consumer;        producer.consumerLinks().add(this);        consumer.producerLinks().add(this);        markSeen();        active = true;    }    public void unlink() {        if (!active) {            return;        }        producer.consumerLinks().remove(this);        consumer.producerLinks().remove(this);        clear();    }    public void clear() {        active = false;        producer = null;        consumer = null;        lastVersion = -1;        lastEpoch = -1;        indexInProducer = -1;        indexInConsumer = -1;    }    @Override    public String toString() {        return "Link[" + consumer + " (" + indexInConsumer + ") -> " + producer + " (" + indexInProducer + ")]";    }}
+// End Link.java
+
+// Begin Producer.java
+
+package io.github.broqlinq.jaguar.reactive.internal;interface Producer {    long version();    ConsumerList consumerLinks();}
+// End Producer.java
+
+// Begin ProducerConsumerNode.java
+
+package io.github.broqlinq.jaguar.reactive.internal;abstract non-sealed class ProducerConsumerNode extends ReactiveNode implements Producer, Consumer {    protected final ConsumerList consumerLinks = new ConsumerList(this);    protected final ProducerList producerLinks = new ProducerList(this);    protected long version;    protected long epoch;    protected boolean invalidated;    protected boolean tracking;    protected ProducerConsumerNode(ThreadConfinedScope scope) {        super(scope);    }    @Override    public long version() {        return version;    }    @Override    public ConsumerList consumerLinks() {        return consumerLinks;    }    protected final void updateVersion() {        version++;    }    protected final void notifyDependents() {        consumerLinks.notifyDependents();    }    @Override    protected void onDispose() {        consumerLinks.unlinkAll();    }    @Override    public long epoch() {        return epoch;    }    @Override    public ProducerList producerLinks() {        return producerLinks;    }    protected void updateEpoch() {        epoch++;    }    @Override    public boolean isTracking() {        return tracking;    }    @Override    public void setTracking(boolean tracking) {        this.tracking = tracking;    }}
+// End ProducerConsumerNode.java
+
+// Begin ProducerList.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import java.util.ArrayDeque;import java.util.Arrays;import java.util.IdentityHashMap;final class ProducerList {    private final ArrayDeque<Link> pool = new ArrayDeque<>();    private final IdentityHashMap<Producer, Link> producerLinks = new IdentityHashMap<>();    private Link[] links = Link.EMPTY_LIST;    private int size = 0;    private final Consumer consumer;    public ProducerList(Consumer consumer) {        this.consumer = consumer;        for (int i = 0; i < 128; i++) {            pool.offer(new Link());        }    }    public Link getOrCreate(Producer producer) {        Link link;        if (size > 32) {            link = producerLinks.get(producer);        } else {            link = null;            for (int i = 0; i < size; i++) {                if (links[i].producer == producer) {                    link = links[i];                    break;                }            }        }        if (link != null) {            return link;        }        link = pool.poll();        if (link == null) {            link = new Link();        }        return link;    }    public void add(Link link) {        if (updateIfPresent(link)) {            return;        }        final int len = links.length;        final int size = this.size;        if (size == len) {            int length = len == 0 ? 4 : len + (len >> 1);            links = Arrays.copyOf(links, length);        }        links[size] = link;        this.size = size + 1;        link.consumer = consumer;        link.indexInConsumer = size;        producerLinks.put(link.producer, link);    }    private boolean updateIfPresent(Link link) {        final int index = link.indexInConsumer;        if (index == -1) {            return false;        }        if (links[index] != link) {            throw new IllegalArgumentException("Corrupted link list in producer");        }        link.markSeen();        return true;    }    public void remove(Link link) {        final int size = this.size;        final int index = link.indexInConsumer;        var removed = links[index];        if (removed != link) {            throw new IllegalArgumentException("Corrupted link list in consumer: " + link);        }        var moved = links[size - 1];        links[size - 1] = null;        if (index != size - 1) {            links[index] = moved;            moved.indexInConsumer = index;        }        this.size = size - 1;        producerLinks.remove(link.producer);    }    public void removeStale() {        final int len = size;        for (int i = len - 1; i >= 0; i--) {            var link = links[i];            if (link.lastEpoch != consumer.epoch()) {//                links[i] = null;                producerLinks.remove(link.producer);                link.unlink();                pool.offer(link);            }        }    }    public void unlinkAll() {        for (int i = size - 1; i >= 0; i--) {            links[i].unlink();        }    }}
+// End ProducerList.java
+
+// Begin ProducerNode.java
+
+package io.github.broqlinq.jaguar.reactive.internal;non-sealed abstract class ProducerNode extends ReactiveNode implements Producer {    protected final ConsumerList consumerLinks = new ConsumerList(this);    protected long version;    protected ProducerNode(ThreadConfinedScope scope) {        super(scope);    }    @Override    public long version() {        return version;    }    @Override    public ConsumerList consumerLinks() {        return consumerLinks;    }    protected final void updateVersion() {        version++;    }    protected final void notifyDependents() {        consumerLinks.notifyDependents();    }    @Override    protected void onDispose() {        consumerLinks.unlinkAll();    }}
+// End ProducerNode.java
+
+// Begin ReactiveNode.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.Scope;sealed abstract class ReactiveNode implements Scoped permits ConsumerNode, ProducerConsumerNode, ProducerNode, ScopedIntConstant {    protected final ThreadConfinedScope scope;    private boolean disposed;    protected ReactiveNode(ThreadConfinedScope scope) {        this.scope = scope;    }    @Override    public Scope scope() {        return scope;    }    public boolean isDisposed() {        return disposed || scope.isClosed();    }    public final void dispose() {        if (disposed) {            return;        }        disposed = true;        onDispose();    }    protected void onDispose() {}    protected final void assertReadable() {        scope.assertOwnerThread();        if (isDisposed()) {            throw new IllegalStateException("Attempted read from disposed node");        }    }    protected final void assertWritable() {        scope.assertOwnerThread();        if (isDisposed()) {            throw new IllegalStateException("Attempted write to disposed node");        }    }}
+// End ReactiveNode.java
+
+// Begin ScopeContext.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.Effect;import io.github.broqlinq.jaguar.reactive.SchedulerTask;import io.github.broqlinq.jaguar.reactive.Signal;import io.github.broqlinq.jaguar.reactive.State;import java.util.function.BiPredicate;import java.util.function.Supplier;interface ScopeContext {    <T> Signal<T> constant(T value);    <T> Signal<T> computed(Supplier<? extends T> supplier);    <T> State<T> state(T initialValue, BiPredicate<? super T, ? super T> eq);    Effect effect(Runnable eff);    boolean isClosed();    void batch(Runnable batch);    void schedule(Runnable task);    void assertOwnerThread();}
+// End ScopeContext.java
+
+// Begin Scoped.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.Scope;public interface Scoped extends Disposable {    Scope scope();}
+// End Scoped.java
+
+// Begin ScopedComputed.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.SchedulerTask;import io.github.broqlinq.jaguar.reactive.Signal;import java.util.Objects;import java.util.function.Function;import java.util.function.Supplier;final class ScopedComputed<T> extends ScopeOwned implements Signal<T>, Producer, Consumer, SchedulerTask {    private final ProducerList producerLinks = new ProducerList(this);    private final ConsumerList consumerLinks = new ConsumerList(this);    private final Supplier<? extends T> supplier;    private T cachedValue = null;    private boolean invalidated = true;    private boolean disposed = false;    private long version = 0;    private long epoch = 0;    private boolean queued = false;    private boolean tracking;    ScopedComputed(ThreadConfinedScope context, Supplier<? extends T> supplier) {        this.supplier = Objects.requireNonNull(supplier, "supplier");        super(context);    }    @Override    public T value() {        assertReadable("Attempted read from disposed signal");        scope.trackingContext().track(this);        recomputeIfNeeded();        return cachedValue;    }    private void recomputeIfNeeded() {        if (!invalidated) {            return;        }        epoch++;        T newValue;        scope.trackingContext().push(this);        try {            newValue = supplier.get();        } finally {            scope.trackingContext().pop(this);        }        // TODO: Do proper equality check, identity check for now        if (cachedValue != newValue) {            cachedValue = newValue;            version++;        }        producerLinks.removeStale();        invalidated = false;        scope.batch(this);    }    @Override    public <R> Signal<R> derive(Function<? super T, ? extends R> mapper) {        Objects.requireNonNull(mapper, "mapper");        assertReadable("Attempted read from disposed signal");        return scope.computed(() -> mapper.apply(value()));    }    @Override    public <R> R transform(Function<? super T, ? extends R> mapper) {        Objects.requireNonNull(mapper, "mapper");        assertReadable("Attempted read from disposed signal");        return mapper.apply(value());    }    @Override    public void dispose() {        if (disposed) {            return;        }        disposed = true;        consumerLinks.unlinkAll();        scope.removeComputed(this);    }    @Override    public boolean isDisposed() {        return disposed || scope.isClosed();    }    @Override    public long version() {        return version;    }    @Override    public ConsumerList consumerLinks() {        return consumerLinks;    }    @Override    public void invalidate() {        if (invalidated) {            return;        }        invalidated = true;        queued = true;        scope.batch(this);    }    @Override    public long epoch() {        return epoch;    }    @Override    public ProducerList producerLinks() {        return producerLinks;    }    @Override    public boolean isTracking() {        return tracking;    }    @Override    public void setTracking(boolean tracking) {        this.tracking = tracking;    }    @Override    public void execute() {        queued = false;        consumerLinks.notifyDependents();    }}
+// End ScopedComputed.java
+
+// Begin ScopedConstant.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.Signal;import java.util.Objects;import java.util.function.Function;final class ScopedConstant<T> extends ScopeOwned implements Signal<T> {    private final T value;    private boolean disposed = false;    ScopedConstant(ThreadConfinedScope context, T value) {        super(context);        this.value = value;    }    @Override    public T value() {        assertReadable("Attempted read from disposed signal");        return value;    }    @Override    public <R> Signal<R> derive(Function<? super T, ? extends R> mapper) {        Objects.requireNonNull(mapper, "mapper");        assertReadable("Attempted read from disposed signal");        return scope.constant(mapper.apply(value()));    }    @Override    public <R> R transform(Function<? super T, ? extends R> mapper) {        Objects.requireNonNull(mapper, "mapper");        assertReadable("Attempted transform from disposed signal");        return mapper.apply(value());    }    @Override    public void dispose() {        disposed = true;    }    @Override    public boolean isDisposed() {        return disposed || scope.isClosed();    }}
+// End ScopedConstant.java
+
+// Begin ScopedEffect.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.Effect;import java.util.Objects;final class ScopedEffect extends ConsumerNode implements Effect {    private final QueueableEffect effect;    ScopedEffect(ThreadConfinedScope context, Runnable effect) {        super(context);        Objects.requireNonNull(effect, "effect");        this.effect = new QueueableEffect(effect);        this.invalidated = true;    }    @Override    public void invalidate() {        if (invalidated) {            return;        }        invalidated = true;        scheduleEffect();    }    @Override    protected void onDispose() {        invalidated = false;        producerLinks.unlinkAll();        scope.removeEffect(this);    }    void scheduleEffect() {        if (isDisposed() || effect.queued) {            return;        }        effect.queued = true;        scope.schedule(effect);    }    private final class QueueableEffect implements Runnable {        private final Runnable runnable;        private boolean queued = false;        QueueableEffect(Runnable effect) {            this.runnable = effect;        }        @Override        public void run() {            queued = false;            if (!invalidated || isDisposed()) {                return;            }            updateEpoch();            boolean completed = false;            scope.trackingContext().push(ScopedEffect.this);            try {                runnable.run();                completed = true;            } finally {                scope.trackingContext().pop(ScopedEffect.this);                if (completed) {                    producerLinks.removeStale();                    invalidated = false;                }            }        }    }}
+// End ScopedEffect.java
+
+// Begin ScopedIntComputed.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.IntSignal;import io.github.broqlinq.jaguar.reactive.Signal;import java.util.Objects;import java.util.function.IntFunction;import java.util.function.IntSupplier;import java.util.function.IntUnaryOperator;final class ScopedIntComputed extends ProducerConsumerNode implements IntSignal {    private final Runnable batchTask = consumerLinks::notifyDependents;    private final IntSupplier supplier;    private int cachedValue;    ScopedIntComputed(ThreadConfinedScope scope, IntSupplier supplier) {        this.supplier = Objects.requireNonNull(supplier, "supplier");        super(scope);        this.invalidated = true;    }    @Override    public int intValue() {        assertReadable();        return valueUnchecked();    }    private int valueUnchecked() {        scope.trackingContext().track(this);        if (invalidated) {            recompute();        }        return cachedValue;    }    private void recompute() {        updateEpoch();        int newValue;        scope.trackingContext().push(this);        try {            newValue = supplier.getAsInt();        } finally {            scope.trackingContext().pop(this);        }        final int oldValue = cachedValue;        if (oldValue != newValue) {            cachedValue = newValue;            updateVersion();        }        producerLinks.removeStale();        invalidated = false;        batchNotifyDependents();    }    private void batchNotifyDependents() {        if (consumerLinks().nonEmpty()) {            scope.batch(batchTask);        }    }    @Override    public <R> Signal<R> derive(IntFunction<? extends R> mapper) {        assertReadable();        Objects.requireNonNull(mapper, "mapper");        return scope.computed(() -> mapper.apply(valueUnchecked()));    }    @Override    public IntSignal deriveInt(IntUnaryOperator mapper) {        assertReadable();        Objects.requireNonNull(mapper, "mapper");        return scope.computedInt(() -> mapper.applyAsInt(valueUnchecked()));    }    @Override    public void invalidate() {        if (invalidated) {            return;        }        invalidated = true;        batchNotifyDependents();    }    @Override    protected void onDispose() {        invalidated = false;        consumerLinks.unlinkAll();        producerLinks.unlinkAll();        scope.removeComputed(this);    }}
+// End ScopedIntComputed.java
+
+// Begin ScopedIntConstant.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.IntSignal;import io.github.broqlinq.jaguar.reactive.Signal;import java.util.function.IntFunction;import java.util.function.IntUnaryOperator;final class ScopedIntConstant extends ReactiveNode implements IntSignal {    private final int value;    ScopedIntConstant(ThreadConfinedScope scope, int value) {        super(scope);        this.value = value;    }    @Override    public int intValue() {        assertReadable();        return value;    }    @Override    public <R> Signal<R> derive(IntFunction<? extends R> mapper) {        assertReadable();        return scope.computed(() -> mapper.apply(value));    }    @Override    public IntSignal deriveInt(IntUnaryOperator mapper) {        assertReadable();        return scope.intConstant(mapper.applyAsInt(value));    }}
+// End ScopedIntConstant.java
+
+// Begin ScopedIntState.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.IntSignal;import io.github.broqlinq.jaguar.reactive.IntState;import io.github.broqlinq.jaguar.reactive.Signal;import java.util.function.IntFunction;import java.util.function.IntUnaryOperator;final class ScopedIntState extends ProducerNode implements IntState {    private int value;    ScopedIntState(ThreadConfinedScope scope) {        super(scope);    }    ScopedIntState(ThreadConfinedScope scope, int initial) {        super(scope);        this.value = initial;    }    @Override    public void set(int value) {        assertWritable();        setUnchecked(value);    }    private void setUnchecked(int newValue) {        int oldValue = this.value;        if (oldValue == newValue) {            return;        }        this.value = newValue;        updateVersion();        notifyDependents();    }    @Override    public void update(IntUnaryOperator updater) {        assertWritable();        final int newValue = updater.applyAsInt(value);        setUnchecked(newValue);    }    @Override    public int intValue() {        assertReadable();        return valueUnchecked();    }    private int valueUnchecked() {        scope.trackingContext().track(this);        return value;    }    @Override    public <R> Signal<R> derive(IntFunction<? extends R> mapper) {        assertReadable();        return scope.computed(() -> mapper.apply(valueUnchecked()));    }    @Override    public IntSignal deriveInt(IntUnaryOperator mapper) {        assertReadable();        return scope.computedInt(() -> mapper.applyAsInt(valueUnchecked()));    }}
+// End ScopedIntState.java
+
+// Begin ScopedState.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.Signal;import io.github.broqlinq.jaguar.reactive.State;import java.util.Objects;import java.util.function.BiPredicate;import java.util.function.Function;final class ScopedState<T> extends ProducerNode implements State<T> {    private final Runnable notifyTask = consumerLinks::notifyDependents;    private final BiPredicate<? super T, ? super T> eq;    private T value;    ScopedState(ThreadConfinedScope scope, T initialValue, BiPredicate<? super T, ? super T> eq) {        this.value = initialValue;        this.eq = Objects.requireNonNull(eq, "eq");        super(scope);    }    @Override    public void set(T value) {        assertWritable();        setUnchecked(value);    }    void setUnchecked(T newValue) {        final T oldValue = this.value;        if (eq.test(oldValue, newValue)) {            return;        }        this.value = newValue;        updateVersion();        batchNotifyDependents();    }    private void batchNotifyDependents() {        if (consumerLinks().nonEmpty()) {            scope.batch(notifyTask);        }    }    @Override    public T value() {        assertReadable();        return valueUnchecked();    }    T valueUnchecked() {        scope.trackingContext().track(this);        return value;    }    @Override    public <R> Signal<R> derive(Function<? super T, ? extends R> mapper) {        assertReadable();        Objects.requireNonNull(mapper, "mapper");        return scope.computed(() -> mapper.apply(valueUnchecked()));    }    @Override    protected void onDispose() {        scope.removeState(this);    }}
+// End ScopedState.java
+
+// Begin ScopeOwned.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.Scope;import java.util.ArrayList;import java.util.List;import java.util.Objects;abstract class ScopeOwned implements Scoped {    protected final ThreadConfinedScope scope;    protected final List<Runnable> cleanup = new ArrayList<>(1);    public ScopeOwned(ThreadConfinedScope scope) {        this.scope = Objects.requireNonNull(scope, "context");    }    @Override    public Scope scope() {        return scope;    }    public boolean isDisposed() {        return scope.isClosed();    }    protected void assertNotDisposed(String message) {        if (isDisposed()) {            throw new IllegalStateException(message);        }    }    protected void assertReadable(String message) {        scope.assertOwnerThread();        assertNotDisposed(message);    }    protected void assertWritable(String message) {        scope.assertOwnerThread();        assertNotDisposed(message);    }    protected final void onDispose(Runnable cleanup) {        this.cleanup.add(cleanup);    }    protected final void cleanup() {        Throwable fail = null;        for (var cleanup : cleanup) {            try {                cleanup.run();            } catch (Throwable ex) {                if (fail == null) {                    fail = ex;                } else {                    fail.addSuppressed(ex);                }            }        }        if (fail != null) {            throw new RuntimeException(fail);        }    }}
+// End ScopeOwned.java
+
+// Begin ThreadConfinedScheduler.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.Scheduler;import io.github.broqlinq.jaguar.reactive.SchedulerTask;import java.util.ArrayDeque;public final class ThreadConfinedScheduler implements Scheduler {    private final Thread ownerThread;    private final ArrayDeque<Runnable> tasks = new ArrayDeque<>(32);    private int batchDepth = 0;    private boolean flushing = false;    public ThreadConfinedScheduler(Thread ownerThread) {        this.ownerThread = ownerThread;    }    @Override    public boolean isOwnerThread() {        return Thread.currentThread() == ownerThread;    }    @Override    public void schedule(Runnable task) {        assertOwnerThread("Attempted to schedule task on non-owner thread");        tasks.offerLast(task);        if (batchDepth == 0) {            flush();        }    }    @Override    public void batch(Runnable task) {        assertOwnerThread("Attempted to batch task on non-owner thread");        batchDepth++;        boolean completed = false;        try {            task.run();            completed = true;        } finally {            batchDepth--;            if (batchDepth == 0 && completed) {                flush();            }        }    }    private void assertOwnerThread(String message) {        if (!isOwnerThread()) {            throw new WrongThreadException(message);        }    }    private void flush() {        if (flushing) {            return;        }        flushing = true;        try {            Runnable task;            while ((task = tasks.pollFirst()) != null) {                task.run();            }        } finally {            flushing = false;        }    }}
+// End ThreadConfinedScheduler.java
+
+// Begin ThreadConfinedScope.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import io.github.broqlinq.jaguar.reactive.*;import java.util.ArrayList;import java.util.Collection;import java.util.LinkedHashSet;import java.util.function.BiPredicate;import java.util.function.IntFunction;import java.util.function.IntSupplier;import java.util.function.Supplier;public final class ThreadConfinedScope implements Scope, ScopeContext {    private final String name;    private final Scope parent;    private final ArrayList<Scope> children = new ArrayList<>();    private final Scheduler scheduler;    private final TrackingContext tracker = new TrackingContext();    private final LinkedHashSet<Scoped> effects = new LinkedHashSet<>();    private final LinkedHashSet<Scoped> computedSignals = new LinkedHashSet<>();    private final LinkedHashSet<Scoped> stateSignals = new LinkedHashSet<>();    private final Runnable cleanup;    private boolean closed = false;    private boolean closing = false;    public ThreadConfinedScope(String name, Scheduler scheduler) {        this(name, null, scheduler);    }    public ThreadConfinedScope(String name, Scope parent, Scheduler scheduler) {        this.name = normalize(name);        this.parent = parent;        this.scheduler = scheduler;        this.cleanup = () -> {        };    }    private ThreadConfinedScope(String name, Scope parent, Scheduler scheduler, Runnable cleanup) {        this.name = name;        this.parent = parent;        this.scheduler = scheduler;        this.cleanup = cleanup;    }    private static String normalize(String name) {        if (name == null || name.isBlank()) {            return "<unnamed-scope>";        }        return name;    }    private static <T> T[] snapshotArray(Collection<? extends T> collection, IntFunction<T[]> arraySupplier) {        return collection.toArray(arraySupplier);    }    public static Scope create(String name) {        return new ThreadConfinedScope(name, new ThreadConfinedScheduler(Thread.currentThread()));    }    @Override    public String name() {        return name;    }    @Override    public Scope child(String name) {        assertAccess();        var scope = new ThreadConfinedScope(name, this, scheduler);        children.add(scope);        return scope;    }    @Override    public Scheduler scheduler() {        assertAccess();        return scheduler;    }    @Override    public <T> Signal<T> constant(T value) {        assertAccess();        return new ScopedConstant<>(this, value);    }    @Override    public IntSignal intConstant(int value) {        assertAccess();        return new ScopedIntConstant(this, value);    }    @Override    public <T> Signal<T> computed(Supplier<? extends T> supplier) {        assertAccess();        var computed = new ScopedComputed<T>(this, supplier);        computedSignals.add(computed);//        computed.onDispose(() -> computedSignals.remove(computed));        return computed;    }    @Override    public <T> Signal<T> computed(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> eq) {        // Ignore for now, return regular computed signal        return computed(supplier);    }    @Override    public IntSignal computedInt(IntSupplier supplier) {        assertAccess();        var computedInt = new ScopedIntComputed(this, supplier);        computedSignals.add(computedInt);        return computedInt;    }    @Override    public <T> State<T> state(T initial, BiPredicate<? super T, ? super T> eq) {        assertAccess();        var state = new ScopedState<>(this, initial, eq);        stateSignals.add(state);        return state;    }    @Override    public IntState intState(int initial) {        assertAccess();        var intState = new ScopedIntState(this, initial);        stateSignals.add(intState);        return intState;    }    @Override    public Effect effect(Runnable eff) {        assertAccess();        var effect = new ScopedEffect(this, eff);        effects.add(effect);        effect.scheduleEffect();        return effect;    }    @Override    public boolean isClosed() {        var closed = this.closed;        if (parent != null) {            closed |= parent.isClosed();        }        return closed;    }    TrackingContext trackingContext() {        assertOpen();        return tracker;    }    @Override    public void assertOwnerThread() {        if (!scheduler.isOwnerThread()) {            throw new WrongThreadException("Attempted access from non-parent thread in scope '" + name + "'");        }    }    @Override    public void batch(Runnable task) {        assertOpen();        scheduler.batch(task);    }    @Override    public void schedule(Runnable task) {        assertOpen();        scheduler.schedule(task);    }    private void assertOpen() {        if (isClosed()) {            throw new IllegalStateException("Attempted to access closed scope '" + name + "'");        }    }    private void assertAccess() {        assertOwnerThread();        assertOpen();    }    @Override    public void close() {        assertOwnerThread();        if (closed || closing) {            return;        }        closing = true;        try {            closeChildren();            disposeEffects();            disposeComputedSignals();            disposeStateSignals();//            cleanup.run();            if (parent != null) {                ((ThreadConfinedScope) parent).children.remove(this);            }            closed = true;        } finally {            closing = true;        }    }    void removeEffect(ReactiveNode effect) {        effects.remove(effect);    }    void removeComputed(ScopedComputed<?> computed) {        computedSignals.remove(computed);    }    void removeState(ReactiveNode state) {        stateSignals.remove(state);    }    private void closeChildren() {        var children = snapshotArray(this.children.reversed(), Scope[]::new);        for (int i = children.length - 1; i >= 0; i--) {            children[i].close();        }    }    void removeComputed(ReactiveNode computed) {        computedSignals.remove(computed);    }    private void disposeEffects() {        var effects = snapshotArray(this.effects.reversed(), Scoped[]::new);        for (int i = effects.length - 1; i >= 0; i--) {            effects[i].dispose();        }    }    private void disposeComputedSignals() {        var computed = snapshotArray(this.computedSignals.reversed(), Scoped[]::new);        for (int i = computed.length - 1; i >= 0; i--) {            computed[i].dispose();        }    }    private void disposeStateSignals() {        var states = snapshotArray(this.stateSignals, Scoped[]::new);        for (int i = states.length - 1; i >= 0; i--) {            states[i].dispose();        }    }}
+// End ThreadConfinedScope.java
+
+// Begin TrackingContext.java
+
+package io.github.broqlinq.jaguar.reactive.internal;import java.util.Arrays;final class TrackingContext {    private Consumer[] stack = new Consumer[128];    private int size = 0;    private Consumer peek() {        if (size == 0) {            return null;        }        return stack[size - 1];    }    public void track(Producer producer) {        if (size > 0) {            var consumer = stack[size - 1];            var link = consumer.producerLinks().getOrCreate(producer);            if (link.active) {                link.markSeen();            } else {                link.link(producer, consumer);            }        }    }    public void push(Consumer consumer) {        if (consumer.isTracking()) {            throw new IllegalStateException("Consumer is already in tracking context, circular dependency detected");        }        if (size == stack.length) {            int newSize = stack.length + stack.length / 2;            stack = Arrays.copyOf(stack, newSize);        }        stack[size++] = consumer;        consumer.setTracking(true);    }    public void pop(Consumer expected) {        if (size == 0 || stack[size - 1] != expected) {            throw new IllegalStateException("Tracking stack corrupted");        }        Consumer consumer = stack[--size];        stack[size] = null;        consumer.setTracking(false);    }}
+// End TrackingContext.java
+
+// Begin IntSignal.java
+
+package io.github.broqlinq.jaguar.reactive;import java.util.function.IntFunction;import java.util.function.IntUnaryOperator;public interface IntSignal {    int intValue();    <R> Signal<R> derive(IntFunction<? extends R> mapper);    IntSignal deriveInt(IntUnaryOperator mapper);}
+// End IntSignal.java
+
+// Begin IntState.java
+
+package io.github.broqlinq.jaguar.reactive;import java.util.function.IntUnaryOperator;public interface IntState extends IntSignal {    void set(int value);    void update(IntUnaryOperator updater);    }
+// End IntState.java
+
+// Begin Scheduler.java
+
+package io.github.broqlinq.jaguar.reactive;public interface Scheduler {    boolean isOwnerThread();    void schedule(Runnable task);    void batch(Runnable task);}
+// End Scheduler.java
+
+// Begin SchedulerTask.java
+
+package io.github.broqlinq.jaguar.reactive;public interface SchedulerTask extends Runnable {    void execute();    default boolean isQueued() {        return false;    }    @Override    default void run() {        execute();    }}
+// End SchedulerTask.java
+
+// Begin Scope.java
+
+package io.github.broqlinq.jaguar.reactive;import java.util.function.BiPredicate;import java.util.function.IntSupplier;import java.util.function.Supplier;public interface Scope extends AutoCloseable {    String name();    Scope child(String name);    Scheduler scheduler();    <T> Signal<T> constant(T value);    IntSignal intConstant(int value);    <T> Signal<T> computed(Supplier<? extends T> supplier);    <T> Signal<T> computed(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> eq);    IntSignal computedInt(IntSupplier supplier);    <T> State<T> state(T initial, BiPredicate<? super T, ? super T> eq);    IntState intState(int initial);    default IntState intState() {        return intState(0);    }    Effect effect(Runnable eff);    boolean isClosed();    default void schedule(Runnable task) {        scheduler().schedule(task);    }    default void batch(Runnable task) {        scheduler().batch(task);    }    @Override    void close();}
+// End Scope.java
+
+// Begin Signal.java
+
+package io.github.broqlinq.jaguar.reactive;import java.util.Objects;import java.util.function.Function;import java.util.function.Supplier;public interface Signal<T> extends Supplier<T> {    @Override    default T get() {        return value();    }    T value();    <R> Signal<R> derive(Function<? super T, ? extends R> mapper);    default <R> R transform(Function<? super T, ? extends R> mapper) {        Objects.requireNonNull(mapper);        return mapper.apply(value());    }}
+// End Signal.java
+
+// Begin State.java
+
+package io.github.broqlinq.jaguar.reactive;import java.util.function.UnaryOperator;public interface State<T> extends Signal<T> {    void set(T value);    default void update(UnaryOperator<T> updater) {        set(updater.apply(value()));    }}
+// End State.java
+
