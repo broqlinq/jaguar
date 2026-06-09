@@ -63,3 +63,5 @@ Thumbs.db
 .classpath
 .settings/
 .vscode/
+
+/jaguar-core/.jqwik-database
