@@ -1,8 +1,9 @@
 package io.github.broqlinq.jaguar.reactive.signal;
 
-import io.github.broqlinq.jaguar.util.Functions.*;
+import io.github.broqlinq.jaguar.reactive.function.Getter;
+import io.github.broqlinq.jaguar.reactive.function.Setter;
 
-import java.util.function.*;
+import java.util.function.UnaryOperator;
 
 public interface State<T> extends Signal<T> {
 
@@ -10,13 +11,44 @@ public interface State<T> extends Signal<T> {
 
     void update(UnaryOperator<T> fn);
 
-    <R> State<R> project(Function<? super T, ? extends R> fn, Combiner<T, R> combiner);
+    <R> State<R> project(Lens<T, R> lens);
 
-    BooleanState project(Predicate<? super T> fn, BooleanCombiner<T> combiner);
+    default <R> State<R> project(Getter<? super T, ? extends R> getter, Setter<T, ? super R> setter) {
+        var lens = Lens.<T, R>of(getter, setter);
+        return project(lens);
+    }
 
-    IntState project(ToIntFunction<? super T> fn, IntCombiner<T> combiner);
+    BooleanState project(Lens.OfBoolean<T> lens);
 
-    LongState project(ToLongFunction<? super T> fn, LongCombiner<T> combiner);
+    default BooleanState project(Getter.OfBoolean<? super T> getter, Setter.OfBoolean<T> setter) {
+        var lens = Lens.of(getter, setter);
+        return project(lens);
+    }
 
-    DoubleState project(ToDoubleFunction<? super T> fn, DoubleCombiner<T> combiner);
+    IntState project(Lens.OfInt<T> lens);
+
+    default IntState project(Getter.OfInt<? super T> getter, Setter.OfInt<T> setter) {
+        var lens = Lens.of(getter, setter);
+        return project(lens);
+    }
+
+    LongState project(Lens.OfLong<T> lens);
+
+    default LongState project(Getter.OfLong<? super T> getter, Setter.OfLong<T> setter) {
+        var lens = Lens.of(getter, setter);
+        return project(lens);
+    }
+
+    FloatState project(Lens.OfFloat<T> lens);
+
+    default FloatState project(Getter.OfFloat<? super T> getter, Setter.OfFloat<T> setter) {
+        var lens = Lens.of(getter, setter);
+        return project(lens);
+    }
+
+    DoubleState project(Lens.OfDouble<T> lens);
+
+    default DoubleState project(Getter.OfDouble<? super T> getter, Setter.OfDouble<T> setter) {
+        return project(Lens.of(getter, setter));
+    }
 }
