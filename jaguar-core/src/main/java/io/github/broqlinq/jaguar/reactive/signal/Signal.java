@@ -1,5 +1,9 @@
 package io.github.broqlinq.jaguar.reactive.signal;
 
+import io.github.broqlinq.jaguar.reactive.function.Getter;
+import io.github.broqlinq.jaguar.reactive.function.ToFloatFunction;
+
+import java.util.Objects;
 import java.util.function.*;
 
 public interface Signal<T> {
@@ -14,25 +18,37 @@ public interface Signal<T> {
 
     LongSignal compute(ToLongFunction<? super T> fn);
 
+    FloatSignal compute(ToFloatFunction<? super T> fn);
+
     DoubleSignal compute(ToDoubleFunction<? super T> fn);
 
-    default <R> R extract(Function<? super T, ? extends R> fn) {
-        return fn.apply(value());
+    default <R> R extract(Getter<? super T, ? extends R> getter) {
+        Objects.requireNonNull(getter, "getter");
+        return getter.get(value());
     }
 
-    default boolean extract(Predicate<? super T> fn) {
-        return fn.test(value());
+    default boolean extract(Getter.OfBoolean<? super T> getter) {
+        Objects.requireNonNull(getter, "getter");
+        return getter.getBoolean(value());
     }
 
-    default int extract(ToIntFunction<? super T> fn) {
-        return fn.applyAsInt(value());
+    default int extract(Getter.OfInt<? super T> getter) {
+        Objects.requireNonNull(getter, "getter");
+        return getter.getInt(value());
     }
 
-    default long extract(ToLongFunction<? super T> fn) {
-        return fn.applyAsLong(value());
+    default long extract(Getter.OfLong<? super T> getter) {
+        Objects.requireNonNull(getter, "getter");
+        return getter.getLong(value());
     }
 
-    default double extract(ToDoubleFunction<? super T> fn) {
-        return fn.applyAsDouble(value());
+    default float extract(Getter.OfFloat<? super T> getter) {
+        Objects.requireNonNull(getter, "getter");
+        return getter.getFloat(value());
+    }
+
+    default double extract(Getter.OfDouble<? super T> getter) {
+        Objects.requireNonNull(getter, "getter");
+        return getter.getDouble(value());
     }
 }

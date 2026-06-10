@@ -22,7 +22,7 @@ public interface Lens<S, T> {
         };
     }
 
-    static <S> Lens.OfBoolean<S> of(
+    static <S> Lens.OfBoolean<S> ofBoolean(
             Getter.OfBoolean<? super S> getter,
             Setter.OfBoolean<S> setter
     ) {
@@ -39,7 +39,7 @@ public interface Lens<S, T> {
         };
     }
 
-    static <S> Lens.OfInt<S> of(
+    static <S> Lens.OfInt<S> ofInt(
             Getter.OfInt<? super S> getter,
             Setter.OfInt<S> setter
     ) {
@@ -56,7 +56,7 @@ public interface Lens<S, T> {
         };
     }
 
-    static <S> Lens.OfLong<S> of(
+    static <S> Lens.OfLong<S> ofLong(
             Getter.OfLong<? super S> getter,
             Setter.OfLong<S> setter
     ) {
@@ -73,7 +73,7 @@ public interface Lens<S, T> {
         };
     }
 
-    static <S> Lens.OfFloat<S> of(
+    static <S> Lens.OfFloat<S> ofFloat(
             Getter.OfFloat<? super S> getter,
             Setter.OfFloat<S> setter
     ) {
@@ -90,7 +90,7 @@ public interface Lens<S, T> {
         };
     }
 
-    static <S> Lens.OfDouble<S> of(
+    static <S> Lens.OfDouble<S> ofDouble(
             Getter.OfDouble<? super S> getter,
             Setter.OfDouble<S> setter
     ) {
