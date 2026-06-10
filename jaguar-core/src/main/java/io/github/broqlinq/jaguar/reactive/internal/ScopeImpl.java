@@ -1,6 +1,7 @@
 package io.github.broqlinq.jaguar.reactive.internal;
 
 import io.github.broqlinq.jaguar.reactive.Scope;
+import io.github.broqlinq.jaguar.reactive.function.FloatSupplier;
 import io.github.broqlinq.jaguar.reactive.signal.*;
 
 import java.util.function.*;
@@ -34,6 +35,11 @@ public final class ScopeImpl implements Scope {
     }
 
     @Override
+    public FloatSignal constant(float value) {
+        return null;
+    }
+
+    @Override
     public DoubleSignal constant(double value) {
         return null;
     }
@@ -59,6 +65,11 @@ public final class ScopeImpl implements Scope {
     }
 
     @Override
+    public FloatState state(float initial) {
+        return null;
+    }
+
+    @Override
     public DoubleState state(double initial) {
         return null;
     }
@@ -80,6 +91,11 @@ public final class ScopeImpl implements Scope {
 
     @Override
     public LongSignal computed(LongSupplier calc) {
+        return null;
+    }
+
+    @Override
+    public FloatSignal computed(FloatSupplier calc) {
         return null;
     }
 
