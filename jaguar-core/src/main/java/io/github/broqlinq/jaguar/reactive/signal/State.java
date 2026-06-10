@@ -12,11 +12,11 @@ public interface State<T> extends Signal<T> {
 
     <R> State<R> project(Function<? super T, ? extends R> fn, Combiner<T, R> combiner);
 
-    BooleanState projectBoolean(Predicate<? super T> fn, BooleanCombiner<T> combiner);
+    BooleanState project(Predicate<? super T> fn, BooleanCombiner<T> combiner);
 
-    IntState projectInt(ToIntFunction<? super T> fn, IntCombiner<T> combiner);
+    IntState project(ToIntFunction<? super T> fn, IntCombiner<T> combiner);
 
-    LongState projectLong(ToLongFunction<? super T> fn, LongCombiner<T> combiner);
+    LongState project(ToLongFunction<? super T> fn, LongCombiner<T> combiner);
 
-    DoubleState projectDouble(ToDoubleFunction<? super T> fn, DoubleCombiner<T> combiner);
+    DoubleState project(ToDoubleFunction<? super T> fn, DoubleCombiner<T> combiner);
 }
