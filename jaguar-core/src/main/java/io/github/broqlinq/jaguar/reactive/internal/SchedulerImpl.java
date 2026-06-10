@@ -2,8 +2,7 @@ package io.github.broqlinq.jaguar.reactive.internal;
 
 import io.github.broqlinq.jaguar.reactive.Scheduler;
 
-import java.util.ArrayDeque;
-import java.util.Objects;
+import static java.util.Objects.requireNonNull;
 
 public final class SchedulerImpl implements Scheduler {
 
@@ -20,7 +19,7 @@ public final class SchedulerImpl implements Scheduler {
     private boolean flushing = false;
 
     public SchedulerImpl(Thread ownerThread) {
-        Objects.requireNonNull(ownerThread, "owner thread cannot be null");
+        requireNonNull(ownerThread, "owner thread cannot be null");
         this.ownerThread = ownerThread;
     }
 
@@ -30,8 +29,9 @@ public final class SchedulerImpl implements Scheduler {
 
     @Override
     public void schedule(Runnable task) {
-        Objects.requireNonNull(task, "task");
         assertOwnerThread();
+        requireNonNull(task, "task");
+
         scheduleUnchecked(task);
     }
 
@@ -41,6 +41,18 @@ public final class SchedulerImpl implements Scheduler {
         if (notProcessing()) {
             flush();
         }
+    }
+
+    private void enqueue(Runnable task) {
+        final int capacity = scheduledTasks.length;
+        final int head = this.head;
+        final int tail = this.tail;
+        if (head - capacity >= tail) {
+            throw new IllegalStateException("Maximum queue capacity exceeded: " + MAX_CAPACITY);
+        }
+        final int index = masked(head);
+        scheduledTasks[index] = task;
+        this.head = head + 1;
     }
 
     private void flush() {
@@ -69,26 +81,10 @@ public final class SchedulerImpl implements Scheduler {
 
     @Override
     public void process(Runnable batch) {
-        Objects.requireNonNull(batch, "batch");
         assertOwnerThread();
+        requireNonNull(batch, "batch");
 
         processUnchecked(batch);
-    }
-
-    private void enqueue(Runnable task) {
-        final int capacity = scheduledTasks.length;
-        final int head = this.head;
-        final int tail = this.tail;
-        if (head - capacity >= tail) {
-            throw new IllegalStateException("Maximum queue capacity exceeded: " + MAX_CAPACITY);
-        }
-        final int index = masked(head);
-        scheduledTasks[index] = task;
-        this.head = head + 1;
-    }
-
-    private boolean notProcessing() {
-        return processLevel == 0;
     }
 
     public void processUnchecked(Runnable batch) {
@@ -105,6 +101,10 @@ public final class SchedulerImpl implements Scheduler {
         }
     }
 
+    private boolean notProcessing() {
+        return processLevel == 0;
+    }
+
     private void enterProcess() {
         processLevel++;
     }
@@ -117,17 +117,5 @@ public final class SchedulerImpl implements Scheduler {
         if (ownerThread != Thread.currentThread()) {
             throw new WrongThreadException("Called scheduler on non-owner thread");
         }
-    }
-
-    ArrayDeque<Runnable> debugAsDeque() {
-        final int head = this.head;
-        int tail = this.tail;
-        ArrayDeque<Runnable> deque = new ArrayDeque<>(head - tail + 1);
-        while (tail != head) {
-            final int index = masked(tail++);
-            final var task = scheduledTasks[index];
-            deque.push(task);
-        }
-        return deque;
     }
 }
