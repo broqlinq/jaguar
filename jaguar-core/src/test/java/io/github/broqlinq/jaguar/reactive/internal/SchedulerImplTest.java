@@ -13,7 +13,7 @@ public class SchedulerImplTest {
 
 
     @Test
-    void scheduleRunsTaskImmediatelyWhenNotProcessing() {
+    void scheduleRunsTaskImmediatelyWhenNotBatching() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
@@ -23,7 +23,7 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void scheduleRunsTasksInFifoOrderWhenNotProcessing() {
+    void scheduleRunsTasksInFifoOrderWhenNotBatching() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
@@ -35,21 +35,21 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void processRunsBodyImmediately() {
+    void batchRunsBodyImmediately() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
-        scheduler.process(() -> events.add("body"));
+        scheduler.batch(() -> events.add("body"));
 
         assertEquals(List.of("body"), events);
     }
 
     @Test
-    void scheduleInsideProcessIsDelayedUntilProcessCompletes() {
+    void scheduleInsideProcessIsDelayedUntilBatchCompletes() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             events.add("before");
             scheduler.schedule(() -> events.add("scheduled"));
             events.add("after");
@@ -61,11 +61,11 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void scheduleInsideProcessFlushesInFifoOrderAfterProcessCompletes() {
+    void scheduleInsideProcessFlushesInFifoOrderAfterBatchCompletes() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             scheduler.schedule(() -> events.add("A"));
             scheduler.schedule(() -> events.add("B"));
             scheduler.schedule(() -> events.add("C"));
@@ -76,16 +76,16 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void nestedProcessFlushesOnlyAfterOutermostProcessCompletes() {
+    void nestedProcessFlushesOnlyAfterOutermostBatchCompletes() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             events.add("outer-start");
 
             scheduler.schedule(() -> events.add("A"));
 
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 events.add("inner-start");
                 scheduler.schedule(() -> events.add("B"));
                 events.add("inner-end");
@@ -110,7 +110,7 @@ public class SchedulerImplTest {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             scheduler.schedule(() -> {
                 events.add("A");
                 scheduler.schedule(() -> events.add("B"));
@@ -143,12 +143,12 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void processDoesNotFlushIfBodyThrows() {
+    void batchDoesNotFlushIfBodyThrows() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
         var thrown = assertThrows(IllegalStateException.class, () -> {
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 scheduler.schedule(() -> events.add("scheduled"));
                 events.add("body");
                 throw new IllegalStateException("boom");
@@ -160,12 +160,12 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void tasksQueuedByFailedProcessCanRunOnLaterFlush() {
+    void tasksQueuedByFailedBatchCanRunOnLaterFlush() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
         assertThrows(IllegalStateException.class, () -> {
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 scheduler.schedule(() -> events.add("from-failed-process"));
                 throw new IllegalStateException("boom");
             });
@@ -184,7 +184,7 @@ public class SchedulerImplTest {
         var events = new ArrayList<String>();
 
         var thrown = assertThrows(IllegalStateException.class, () -> {
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 scheduler.schedule(() -> {
                     events.add("A");
                     throw new IllegalStateException("boom");
@@ -203,7 +203,7 @@ public class SchedulerImplTest {
         var events = new ArrayList<String>();
 
         assertThrows(IllegalStateException.class, () -> {
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 scheduler.schedule(() -> {
                     events.add("A");
                     throw new IllegalStateException("boom");
@@ -225,10 +225,10 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void processRejectsNullBatch() {
+    void batchRejectsNullBatch() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
 
-        assertThrows(NullPointerException.class, () -> scheduler.process(null));
+        assertThrows(NullPointerException.class, () -> scheduler.batch(null));
     }
 
     @Test
@@ -251,13 +251,13 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void processRejectsWrongThread() throws Exception {
+    void batchRejectsWrongThread() throws Exception {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var failure = new AtomicReference<Throwable>();
 
         var thread = new Thread(() -> {
             try {
-                scheduler.process(() -> {});
+                scheduler.batch(() -> {});
             } catch (Throwable ex) {
                 failure.set(ex);
             }
@@ -291,14 +291,14 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void processUncheckedDoesNotRejectWrongThread() throws Exception {
+    void batchUncheckedDoesNotRejectWrongThread() throws Exception {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var failure = new AtomicReference<Throwable>();
         var ran = new AtomicReference<Boolean>(false);
 
         var thread = new Thread(() -> {
             try {
-                scheduler.processUnchecked(() -> ran.set(true));
+                scheduler.batchUnchecked(() -> ran.set(true));
             } catch (Throwable ex) {
                 failure.set(ex);
             }
@@ -312,11 +312,11 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void supportsCapacityMinusOneQueuedTasksInsideProcess() {
+    void supportsCapacityMinusOneQueuedTasksInsideBatch() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var counter = new int[1];
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int i = 0; i < 16_384; i++) {
                 scheduler.schedule(() -> counter[0]++);
             }
@@ -328,11 +328,11 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void throwsWhenMaximumQueueCapacityExceededInsideProcess() {
+    void throwsWhenMaximumQueueCapacityExceededInsideBatch() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
 
         assertThrows(IllegalStateException.class, () -> {
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 for (int i = 0; i < 16_384; i++) {
                     scheduler.schedule(() -> {});
                 }
@@ -347,13 +347,13 @@ public class SchedulerImplTest {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var counter = new int[1];
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int i = 0; i < 16_384; i++) {
                 scheduler.schedule(() -> counter[0]++);
             }
         });
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int i = 0; i < 16_384; i++) {
                 scheduler.schedule(() -> counter[0]++);
             }
@@ -363,14 +363,14 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void processCanBeCalledFromScheduledTask() {
+    void batchCanBeCalledFromScheduledTask() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
         scheduler.schedule(() -> {
             events.add("A");
 
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 events.add("B");
                 scheduler.schedule(() -> events.add("D"));
                 events.add("C");
@@ -383,15 +383,15 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void taskScheduledFromNestedProcessDuringFlushRunsAfterCurrentFlushWork() {
+    void taskScheduledFromNestedBatchDuringFlushRunsAfterCurrentFlushWork() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var events = new ArrayList<String>();
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             scheduler.schedule(() -> {
                 events.add("A");
 
-                scheduler.process(() -> {
+                scheduler.batch(() -> {
                     events.add("B");
                     scheduler.schedule(() -> events.add("D"));
                     events.add("C");
@@ -414,10 +414,10 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void uncheckedProcessRejectsNullEventuallyWithNullPointerException() {
+    void uncheckedBatchRejectsNullEventuallyWithNullPointerException() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
 
-        assertThrows(NullPointerException.class, () -> scheduler.processUnchecked(null));
+        assertThrows(NullPointerException.class, () -> scheduler.batchUnchecked(null));
     }
 
     @Test
@@ -433,12 +433,12 @@ public class SchedulerImplTest {
     }
 
     @Test
-    void queueContinuesToWorkAfterManyProcessFlushes() {
+    void queueContinuesToWorkAfterManyBatchFlushes() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var counter = new int[1];
 
         for (int i = 0; i < 10_000; i++) {
-            scheduler.process(() -> scheduler.schedule(() -> counter[0]++));
+            scheduler.batch(() -> scheduler.schedule(() -> counter[0]++));
         }
 
         assertEquals(10_000, counter[0]);

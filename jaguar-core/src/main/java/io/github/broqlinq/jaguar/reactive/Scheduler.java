@@ -4,5 +4,5 @@ public interface Scheduler {
 
     void schedule(Runnable task);
 
-    void process(Runnable batch);
+    void batch(Runnable batch);
 }

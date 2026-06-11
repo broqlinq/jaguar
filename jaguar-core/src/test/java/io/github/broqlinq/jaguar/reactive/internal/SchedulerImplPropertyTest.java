@@ -22,7 +22,7 @@ public class SchedulerImplPropertyTest {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var actual = new ArrayList<Integer>();
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int id : ids) {
                 scheduler.schedule(() -> actual.add(id));
             }
@@ -43,13 +43,13 @@ public class SchedulerImplPropertyTest {
     }
 
     @Property
-    void processDelaysAllScheduledTasksUntilEnd(
+    void batchDelaysAllScheduledTasksUntilEnd(
             @ForAll("taskIds") List<Integer> ids
     ) {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var actual = new ArrayList<Integer>();
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int id : ids) {
                 scheduler.schedule(() -> actual.add(id));
             }
@@ -61,7 +61,7 @@ public class SchedulerImplPropertyTest {
     }
 
     @Property
-    void nestedProcessesStillFlushOnlyAfterOutermostProcess(
+    void nestedProcessesStillFlushOnlyAfterOutermostBatch(
             @ForAll("taskIds") List<Integer> outer,
             @ForAll("taskIds") List<Integer> inner
     ) {
@@ -69,13 +69,13 @@ public class SchedulerImplPropertyTest {
         var actual = new ArrayList<Integer>();
         var expected = new ArrayList<Integer>();
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int id : outer) {
                 scheduler.schedule(() -> actual.add(id));
                 expected.add(id);
             }
 
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 for (int id : inner) {
                     scheduler.schedule(() -> actual.add(id));
                     expected.add(id);
@@ -106,7 +106,7 @@ public class SchedulerImplPropertyTest {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var actual = new ArrayList<Integer>();
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int id : ids) {
                 scheduler.schedule(() -> actual.add(id));
             }
@@ -118,7 +118,7 @@ public class SchedulerImplPropertyTest {
     }
 
     @Property
-    void nestedProcessPreservesScheduleOrder(
+    void nestedBatchPreservesScheduleOrder(
             @ForAll("taskIds") List<Integer> outer,
             @ForAll("taskIds") List<Integer> inner
     ) {
@@ -127,13 +127,13 @@ public class SchedulerImplPropertyTest {
         var actual = new ArrayList<Integer>();
         var expected = new ArrayList<Integer>();
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int id : outer) {
                 expected.add(id);
                 scheduler.schedule(() -> actual.add(id));
             }
 
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 for (int id : inner) {
                     expected.add(id);
                     scheduler.schedule(() -> actual.add(id));
@@ -161,7 +161,7 @@ public class SchedulerImplPropertyTest {
         expected.addAll(first);
         expected.addAll(second);
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int id : first) {
                 scheduler.schedule(() -> actual.add(id));
             }
@@ -177,12 +177,12 @@ public class SchedulerImplPropertyTest {
     }
 
     @Test
-    void failedProcessDoesNotFlushButQueuedTasksSurvive() {
+    void failedBatchDoesNotFlushButQueuedTasksSurvive() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var actual = new ArrayList<String>();
 
         assertThrows(IllegalStateException.class, () -> {
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 scheduler.schedule(() -> actual.add("A"));
                 throw new IllegalStateException("boom");
             });
@@ -196,11 +196,11 @@ public class SchedulerImplPropertyTest {
     }
 
     @Test
-    void throwsWhenCapacityExceededInsideProcess() {
+    void throwsWhenCapacityExceededInsideBatch() {
         var scheduler = new SchedulerImpl(Thread.currentThread());
 
         assertThrows(IllegalStateException.class, () -> {
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 for (int i = 0; i < 16_384; i++) {
                     scheduler.schedule(() -> {});
                 }
@@ -216,7 +216,7 @@ public class SchedulerImplPropertyTest {
         var actual = new ArrayList<String>();
 
         assertThrows(IllegalStateException.class, () -> {
-            scheduler.process(() -> {
+            scheduler.batch(() -> {
                 scheduler.schedule(() -> {
                     actual.add("A");
                     throw new IllegalStateException("boom");
@@ -237,13 +237,13 @@ public class SchedulerImplPropertyTest {
         var scheduler = new SchedulerImpl(Thread.currentThread());
         var count = new int[1];
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int i = 0; i < 16_384; i++) {
                 scheduler.schedule(() -> count[0]++);
             }
         });
 
-        scheduler.process(() -> {
+        scheduler.batch(() -> {
             for (int i = 0; i < 16_384; i++) {
                 scheduler.schedule(() -> count[0]++);
             }

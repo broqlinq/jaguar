@@ -15,7 +15,7 @@ public final class SchedulerImpl implements Scheduler {
     private int head = 0;
     private int tail = 0;
 
-    private int processLevel = 0;
+    private int batchLevel = 0;
     private boolean flushing = false;
 
     public SchedulerImpl(Thread ownerThread) {
@@ -38,7 +38,7 @@ public final class SchedulerImpl implements Scheduler {
     public void scheduleUnchecked(Runnable task) {
         enqueue(task);
 
-        if (notProcessing()) {
+        if (notBatching()) {
             flush();
         }
     }
@@ -80,42 +80,43 @@ public final class SchedulerImpl implements Scheduler {
     }
 
     @Override
-    public void process(Runnable batch) {
+    public void batch(Runnable batch) {
         assertOwnerThread();
         requireNonNull(batch, "batch");
 
-        processUnchecked(batch);
+        batchUnchecked(batch);
     }
 
-    public void processUnchecked(Runnable batch) {
-        enterProcess();
+    public void batchUnchecked(Runnable batch) {
+        enterBatch();
         boolean completed = false;
         try {
             batch.run();
             completed = true;
         } finally {
-            exitProcess();
-            if (completed && notProcessing()) {
+            exitBatch();
+            if (completed && notBatching()) {
                 flush();
             }
         }
     }
 
-    private boolean notProcessing() {
-        return processLevel == 0;
+    private boolean notBatching() {
+        return batchLevel == 0;
     }
 
-    private void enterProcess() {
-        processLevel++;
+    private void enterBatch() {
+        batchLevel++;
     }
 
-    private void exitProcess() {
-        processLevel--;
+    private void exitBatch() {
+        batchLevel--;
     }
 
-    private void assertOwnerThread() {
+    void assertOwnerThread() {
         if (ownerThread != Thread.currentThread()) {
             throw new WrongThreadException("Called scheduler on non-owner thread");
         }
     }
+
 }
