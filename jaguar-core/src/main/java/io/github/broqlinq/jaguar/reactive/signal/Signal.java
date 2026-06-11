@@ -12,42 +12,42 @@ public interface Signal<T> {
 
     <R> Signal<R> compute(Function<? super T, ? extends R> fn);
 
-    BooleanSignal compute(Predicate<? super T> fn);
+    BooleanSignal deriveBoolean(Predicate<? super T> fn);
 
-    IntSignal compute(ToIntFunction<? super T> fn);
+    IntSignal deriveInt(ToIntFunction<? super T> fn);
 
-    LongSignal compute(ToLongFunction<? super T> fn);
+    LongSignal deriveLong(ToLongFunction<? super T> fn);
 
-    FloatSignal compute(ToFloatFunction<? super T> fn);
+    FloatSignal deriveFloat(ToFloatFunction<? super T> fn);
 
-    DoubleSignal compute(ToDoubleFunction<? super T> fn);
+    DoubleSignal deriveDouble(ToDoubleFunction<? super T> fn);
 
     default <R> R extract(Getter<? super T, ? extends R> getter) {
         Objects.requireNonNull(getter, "getter");
         return getter.get(value());
     }
 
-    default boolean extract(Getter.OfBoolean<? super T> getter) {
+    default boolean extractBoolean(Getter.OfBoolean<? super T> getter) {
         Objects.requireNonNull(getter, "getter");
         return getter.getBoolean(value());
     }
 
-    default int extract(Getter.OfInt<? super T> getter) {
+    default int extractInt(Getter.OfInt<? super T> getter) {
         Objects.requireNonNull(getter, "getter");
         return getter.getInt(value());
     }
 
-    default long extract(Getter.OfLong<? super T> getter) {
+    default long extractLong(Getter.OfLong<? super T> getter) {
         Objects.requireNonNull(getter, "getter");
         return getter.getLong(value());
     }
 
-    default float extract(Getter.OfFloat<? super T> getter) {
+    default float extractFloat(Getter.OfFloat<? super T> getter) {
         Objects.requireNonNull(getter, "getter");
         return getter.getFloat(value());
     }
 
-    default double extract(Getter.OfDouble<? super T> getter) {
+    default double extractDouble(Getter.OfDouble<? super T> getter) {
         Objects.requireNonNull(getter, "getter");
         return getter.getDouble(value());
     }

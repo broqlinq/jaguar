@@ -20,35 +20,35 @@ public interface State<T> extends Signal<T> {
 
     BooleanState project(Lens.OfBoolean<T> lens);
 
-    default BooleanState project(Getter.OfBoolean<? super T> getter, Setter.OfBoolean<T> setter) {
+    default BooleanState projectBoolean(Getter.OfBoolean<? super T> getter, Setter.OfBoolean<T> setter) {
         var lens = Lens.ofBoolean(getter, setter);
         return project(lens);
     }
 
     IntState project(Lens.OfInt<T> lens);
 
-    default IntState project(Getter.OfInt<? super T> getter, Setter.OfInt<T> setter) {
+    default IntState projectInt(Getter.OfInt<? super T> getter, Setter.OfInt<T> setter) {
         var lens = Lens.ofInt(getter, setter);
         return project(lens);
     }
 
     LongState project(Lens.OfLong<T> lens);
 
-    default LongState project(Getter.OfLong<? super T> getter, Setter.OfLong<T> setter) {
+    default LongState projectLong(Getter.OfLong<? super T> getter, Setter.OfLong<T> setter) {
         var lens = Lens.ofLong(getter, setter);
         return project(lens);
     }
 
     FloatState project(Lens.OfFloat<T> lens);
 
-    default FloatState project(Getter.OfFloat<? super T> getter, Setter.OfFloat<T> setter) {
+    default FloatState projectFloat(Getter.OfFloat<? super T> getter, Setter.OfFloat<T> setter) {
         var lens = Lens.ofFloat(getter, setter);
         return project(lens);
     }
 
     DoubleState project(Lens.OfDouble<T> lens);
 
-    default DoubleState project(Getter.OfDouble<? super T> getter, Setter.OfDouble<T> setter) {
+    default DoubleState projectDouble(Getter.OfDouble<? super T> getter, Setter.OfDouble<T> setter) {
         return project(Lens.ofDouble(getter, setter));
     }
 }
