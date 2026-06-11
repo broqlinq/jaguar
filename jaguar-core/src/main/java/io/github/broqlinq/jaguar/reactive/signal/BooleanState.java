@@ -1,4 +1,11 @@
 package io.github.broqlinq.jaguar.reactive.signal;
 
-public interface BooleanState {
+import io.github.broqlinq.jaguar.reactive.function.BooleanUnaryOperator;
+
+public interface BooleanState extends BooleanSignal {
+
+    void set(boolean value);
+
+    void update(BooleanUnaryOperator fn);
+
 }
