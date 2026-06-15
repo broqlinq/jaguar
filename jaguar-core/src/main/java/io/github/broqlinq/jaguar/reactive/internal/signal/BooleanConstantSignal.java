@@ -6,8 +6,9 @@ import io.github.broqlinq.jaguar.reactive.internal.ScopeResource;
 import io.github.broqlinq.jaguar.reactive.signal.*;
 
 import java.util.Objects;
+import java.util.function.BiPredicate;
 
-public class BooleanConstantSignal extends ScopeResource implements BooleanSignal {
+public final class BooleanConstantSignal extends ScopeResource implements BooleanSignal {
 
     private final boolean value;
 
@@ -23,8 +24,7 @@ public class BooleanConstantSignal extends ScopeResource implements BooleanSigna
     }
 
     @Override
-    public <R> Signal<R> derive(BooleanFunction<? extends R> fn) {
-        Objects.requireNonNull(fn, "fn");
+    public <R> Signal<R> derive(BooleanFunction<? extends R> fn, BiPredicate<? super R, ? super R> equality) {
         return scope.constant(fn.apply(value));
     }
 

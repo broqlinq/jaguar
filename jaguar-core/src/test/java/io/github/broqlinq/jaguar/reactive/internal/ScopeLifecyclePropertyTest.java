@@ -1,4 +1,4 @@
-package io.github.broqlinq.jaguar.reactive;
+package io.github.broqlinq.jaguar.reactive.internal;
 
 import net.jqwik.api.*;
 import net.jqwik.api.constraints.Size;

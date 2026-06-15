@@ -1,4 +1,4 @@
-package io.github.broqlinq.jaguar.reactive;
+package io.github.broqlinq.jaguar.reactive.internal;
 
 import io.github.broqlinq.jaguar.reactive.signal.Signal;
 import org.junit.jupiter.api.Test;

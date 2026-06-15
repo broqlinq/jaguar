@@ -1,7 +1,4 @@
-package io.github.broqlinq.jaguar.reactive;
-
-import io.github.broqlinq.jaguar.reactive.internal.ConfinedScope;
-import io.github.broqlinq.jaguar.reactive.internal.SchedulerImpl;
+package io.github.broqlinq.jaguar.reactive.internal;
 
 final class ReactivePropertyTestSupport {
 

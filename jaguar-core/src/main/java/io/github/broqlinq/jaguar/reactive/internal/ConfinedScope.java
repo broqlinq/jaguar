@@ -6,6 +6,7 @@ import io.github.broqlinq.jaguar.reactive.signal.IntSignal;
 import io.github.broqlinq.jaguar.reactive.signal.IntState;
 import io.github.broqlinq.jaguar.reactive.signal.*;
 
+import java.util.Objects;
 import java.util.function.*;
 
 public final class ConfinedScope implements Scope, TrackingContext {
@@ -33,35 +34,35 @@ public final class ConfinedScope implements Scope, TrackingContext {
     public BooleanSignal constant(boolean value) {
         assertOwnerThread();
         assertOpen();
-        return null;
+        return signalFactory.constant(value);
     }
 
     @Override
     public IntSignal constant(int value) {
         assertOwnerThread();
         assertOpen();
-        return null;
+        return signalFactory.constant(value);
     }
 
     @Override
     public LongSignal constant(long value) {
         assertOwnerThread();
         assertOpen();
-        return null;
+        return signalFactory.constant(value);
     }
 
     @Override
     public FloatSignal constant(float value) {
         assertOwnerThread();
         assertOpen();
-        return null;
+        return signalFactory.constant(value);
     }
 
     @Override
     public DoubleSignal constant(double value) {
         assertOwnerThread();
         assertOpen();
-        return null;
+        return signalFactory.constant(value);
     }
 
     @Override
@@ -95,28 +96,38 @@ public final class ConfinedScope implements Scope, TrackingContext {
     public LongState state(long initial) {
         assertOwnerThread();
         assertOpen();
-        return null;
+        var state = signalFactory.state(initial);
+        session.addStateResource(state);
+        return state;
     }
 
     @Override
     public FloatState state(float initial) {
         assertOwnerThread();
         assertOpen();
-        return null;
+        var state = signalFactory.state(initial);
+        session.addStateResource(state);
+        return state;
     }
 
     @Override
     public DoubleState state(double initial) {
         assertOwnerThread();
         assertOpen();
-        return null;
+        var state = signalFactory.state(initial);
+        session.addStateResource(state);
+        return state;
     }
 
     @Override
-    public <T> Signal<T> computed(Supplier<? extends T> calc, BiPredicate<? super T, ? super T> predicate) {
+    public <T> Signal<T> computed(Supplier<? extends T> fn, BiPredicate<? super T, ? super T> equality) {
         assertOwnerThread();
         assertOpen();
-        var computed = signalFactory.<T>computed(calc, predicate);
+
+        Objects.requireNonNull(fn, "fn");
+        Objects.requireNonNull(equality, "equality");
+
+        var computed = signalFactory.<T>computed(fn, equality);
         session.addComputedResource(computed);
         return computed;
     }

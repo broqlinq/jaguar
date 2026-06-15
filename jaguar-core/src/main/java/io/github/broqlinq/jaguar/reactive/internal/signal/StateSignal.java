@@ -60,6 +60,41 @@ public final class StateSignal<T> extends StateSignalBase implements State<T> {
     }
 
     @Override
+    public <R> Signal<R> derive(Function<? super T, ? extends R> fn, BiPredicate<? super R, ? super R> equality) {
+        return scope.computed(() -> fn.apply(valueUnchecked()), equality);
+    }
+
+    @Override
+    public <R> Signal<R> derive(Function<? super T, ? extends R> fn) {
+        return scope.computed(() -> fn.apply(valueUnchecked()));
+    }
+
+    @Override
+    public BooleanSignal deriveBoolean(Predicate<? super T> fn) {
+        return scope.computed(() -> fn.test(valueUnchecked()));
+    }
+
+    @Override
+    public IntSignal deriveInt(ToIntFunction<? super T> fn) {
+        return scope.computed(() -> fn.applyAsInt(valueUnchecked()));
+    }
+
+    @Override
+    public LongSignal deriveLong(ToLongFunction<? super T> fn) {
+        return scope.computed(() -> fn.applyAsLong(valueUnchecked()));
+    }
+
+    @Override
+    public FloatSignal deriveFloat(ToFloatFunction<? super T> fn) {
+        return scope.computed(() -> fn.applyAsFloat(valueUnchecked()));
+    }
+
+    @Override
+    public DoubleSignal deriveDouble(ToDoubleFunction<? super T> fn) {
+        return scope.computed(() -> fn.applyAsDouble(valueUnchecked()));
+    }
+
+    @Override
     public <R> State<R> project(Lens<T, R> lens) {
         return null;
     }
@@ -87,41 +122,5 @@ public final class StateSignal<T> extends StateSignalBase implements State<T> {
     @Override
     public DoubleState project(Lens.OfDouble<T> lens) {
         return null;
-    }
-
-    @Override
-    public <R> Signal<R> derive(Function<? super T, ? extends R> fn) {
-        Objects.requireNonNull(fn, "fn");
-        return scope.computed(() -> fn.apply(valueUnchecked()));
-    }
-
-    @Override
-    public BooleanSignal deriveBoolean(Predicate<? super T> fn) {
-        Objects.requireNonNull(fn, "fn");
-        return scope.computed(() -> fn.test(valueUnchecked()));
-    }
-
-    @Override
-    public IntSignal deriveInt(ToIntFunction<? super T> fn) {
-        Objects.requireNonNull(fn, "fn");
-        return scope.computed(() -> fn.applyAsInt(valueUnchecked()));
-    }
-
-    @Override
-    public LongSignal deriveLong(ToLongFunction<? super T> fn) {
-        Objects.requireNonNull(fn, "fn");
-        return scope.computed(() -> fn.applyAsLong(valueUnchecked()));
-    }
-
-    @Override
-    public FloatSignal deriveFloat(ToFloatFunction<? super T> fn) {
-        Objects.requireNonNull(fn, "fn");
-        return scope.computed(() -> fn.applyAsFloat(valueUnchecked()));
-    }
-
-    @Override
-    public DoubleSignal deriveDouble(ToDoubleFunction<? super T> fn) {
-        Objects.requireNonNull(fn, "fn");
-        return scope.computed(() -> fn.applyAsDouble(valueUnchecked()));
     }
 }

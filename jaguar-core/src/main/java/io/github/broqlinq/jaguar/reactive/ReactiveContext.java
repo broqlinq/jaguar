@@ -1,4 +1,4 @@
-package io.github.broqlinq.jaguar.reactive.internal;
+package io.github.broqlinq.jaguar.reactive;
 
 import io.github.broqlinq.jaguar.reactive.function.FloatSupplier;
 import io.github.broqlinq.jaguar.reactive.signal.IntSignal;
@@ -18,6 +18,9 @@ public interface ReactiveContext {
     DoubleSignal constant(double value);
 
     <T> State<T> state(T initial, BiPredicate<? super T, ? super T> predicate);
+    default <T> State<T> state(T initial) {
+        return state(initial, Objects::equals);
+    }
     BooleanState state(boolean initial);
     IntState state(int initial);
     LongState state(long initial);

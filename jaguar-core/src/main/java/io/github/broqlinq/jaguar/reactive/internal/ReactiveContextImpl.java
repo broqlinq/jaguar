@@ -1,9 +1,11 @@
 package io.github.broqlinq.jaguar.reactive.internal;
 
+import io.github.broqlinq.jaguar.reactive.ReactiveContext;
 import io.github.broqlinq.jaguar.reactive.function.FloatSupplier;
 import io.github.broqlinq.jaguar.reactive.internal.signal.*;
 import io.github.broqlinq.jaguar.reactive.signal.*;
 
+import java.util.Objects;
 import java.util.function.*;
 
 final class ReactiveContextImpl implements ReactiveContext {
@@ -21,91 +23,95 @@ final class ReactiveContextImpl implements ReactiveContext {
 
     @Override
     public BooleanSignal constant(boolean value) {
-        return null;
+        return new BooleanConstantSignal(scope, value);
     }
 
     @Override
     public IntSignal constant(int value) {
-        return null;
+        return new IntConstantSignal(scope, value);
     }
 
     @Override
     public LongSignal constant(long value) {
-        return null;
+        return new LongConstantSignal(scope, value);
     }
 
     @Override
     public FloatSignal constant(float value) {
-        return null;
+        return new FloatConstantSignal(scope, value);
     }
 
     @Override
     public DoubleSignal constant(double value) {
-        return null;
+        return new DoubleConstantSignal(scope, value);
     }
 
     @Override
-    public <T> StateSignal<T> state(T initial, BiPredicate<? super T, ? super T> predicate) {
-        return new StateSignal<>(scope, initial, predicate);
+    public <T> StateSignal<T> state(T initial, BiPredicate<? super T, ? super T> equality) {
+        Objects.requireNonNull(equality, "equality");
+        return new StateSignal<>(scope, initial, equality);
     }
 
     @Override
     public BooleanStateSignal state(boolean initial) {
-        return null;
+        return new BooleanStateSignal(scope, initial);
     }
 
     @Override
     public IntStateSignal state(int initial) {
+        return new IntStateSignal(scope, initial);
+    }
+
+    @Override
+    public LongStateSignal state(long initial) {
+        return new LongStateSignal(scope, initial);
+    }
+
+    @Override
+    public FloatStateSignal state(float initial) {
+        return new FloatStateSignal(scope, initial);
+    }
+
+    @Override
+    public DoubleStateSignal state(double initial) {
+        return new DoubleStateSignal(scope, initial);
+    }
+
+    @Override
+    public <T> ComputedSignal<T> computed(Supplier<? extends T> supplier, BiPredicate<? super T, ? super T> equality) {
+        Objects.requireNonNull(supplier, "supplier");
+        return new ComputedSignal<>(scope, supplier, equality);
+    }
+
+    @Override
+    public BooleanSignal computed(BooleanSupplier supplier) {
+        Objects.requireNonNull(supplier, "supplier");
         return null;
     }
 
     @Override
-    public LongState state(long initial) {
+    public IntSignal computed(IntSupplier supplier) {
         return null;
     }
 
     @Override
-    public FloatState state(float initial) {
+    public LongSignal computed(LongSupplier supplier) {
         return null;
     }
 
     @Override
-    public DoubleState state(double initial) {
+    public FloatSignal computed(FloatSupplier supplier) {
         return null;
     }
 
     @Override
-    public <T> ComputedSignal<T> computed(Supplier<? extends T> calc, BiPredicate<? super T, ? super T> predicate) {
-        return new ComputedSignal<>(scope, calc, predicate);
-    }
-
-    @Override
-    public BooleanSignal computed(BooleanSupplier calc) {
-        return null;
-    }
-
-    @Override
-    public IntSignal computed(IntSupplier calc) {
-        return null;
-    }
-
-    @Override
-    public LongSignal computed(LongSupplier calc) {
-        return null;
-    }
-
-    @Override
-    public FloatSignal computed(FloatSupplier calc) {
-        return null;
-    }
-
-    @Override
-    public DoubleSignal computed(DoubleSupplier calc) {
+    public DoubleSignal computed(DoubleSupplier supplier) {
         return null;
     }
 
     @Override
     public ReactiveEffect effect(Runnable effect) {
+        Objects.requireNonNull(effect, "effect");
         return new ReactiveEffect(scope, effect);
     }
 }

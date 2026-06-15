@@ -10,7 +10,11 @@ public interface Signal<T> {
 
     T value();
 
-    <R> Signal<R> derive(Function<? super T, ? extends R> fn);
+    <R> Signal<R> derive(Function<? super T, ? extends R> fn, BiPredicate<? super R, ? super R> equality);
+
+    default <R> Signal<R> derive(Function<? super T, ? extends R> fn) {
+        return derive(fn, Objects::equals);
+    }
 
     BooleanSignal deriveBoolean(Predicate<? super T> fn);
 

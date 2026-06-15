@@ -14,6 +14,15 @@ public abstract class ScopeResource extends ScopeSession.Resource {
         }
     }
 
+    protected final void assertOpen() {
+        if (isDisposed()) {
+            throw new IllegalStateException("Resource is already disposed");
+        }
+        if (scope.isClosed()) {
+            throw new IllegalStateException("Resource scope is closed");
+        }
+    }
+
     @Override
     protected void onDispose() {
 

@@ -1,6 +1,5 @@
-package io.github.broqlinq.jaguar.reactive;
+package io.github.broqlinq.jaguar.reactive.internal;
 
-import io.github.broqlinq.jaguar.reactive.internal.SchedulerImpl;
 import net.jqwik.api.*;
 import org.junit.jupiter.api.Test;
 

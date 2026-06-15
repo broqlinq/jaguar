@@ -1,4 +1,10 @@
 package io.github.broqlinq.jaguar.reactive.signal;
 
-public interface LongState {
+import java.util.function.LongUnaryOperator;
+
+public interface LongState extends LongSignal {
+
+    void set(long newValue);
+
+    void update(LongUnaryOperator updater);
 }

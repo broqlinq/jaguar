@@ -24,38 +24,32 @@ public final class ConstantSignal<T> extends ScopeResource implements Signal<T> 
     }
 
     @Override
-    public <R> Signal<R> derive(Function<? super T, ? extends R> fn) {
-        Objects.requireNonNull(fn, "fn");
+    public <R> Signal<R> derive(Function<? super T, ? extends R> fn, BiPredicate<? super R, ? super R> equality) {
         return scope.constant(fn.apply(value));
     }
 
     @Override
     public BooleanSignal deriveBoolean(Predicate<? super T> fn) {
-        Objects.requireNonNull(fn, "fn");
         return scope.constant(fn.test(value));
     }
 
     @Override
     public IntSignal deriveInt(ToIntFunction<? super T> fn) {
-        Objects.requireNonNull(fn, "fn");
         return scope.constant(fn.applyAsInt(value));
     }
 
     @Override
     public LongSignal deriveLong(ToLongFunction<? super T> fn) {
-        Objects.requireNonNull(fn, "fn");
         return scope.constant(fn.applyAsLong(value));
     }
 
     @Override
     public FloatSignal deriveFloat(ToFloatFunction<? super T> fn) {
-        Objects.requireNonNull(fn, "fn");
         return scope.constant(fn.applyAsFloat(value));
     }
 
     @Override
     public DoubleSignal deriveDouble(ToDoubleFunction<? super T> fn) {
-        Objects.requireNonNull(fn, "fn");
         return scope.constant(fn.applyAsDouble(value));
     }
 

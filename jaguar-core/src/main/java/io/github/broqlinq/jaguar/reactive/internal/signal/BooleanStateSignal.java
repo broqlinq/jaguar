@@ -5,20 +5,21 @@ import io.github.broqlinq.jaguar.reactive.internal.ConfinedScope;
 import io.github.broqlinq.jaguar.reactive.signal.*;
 
 import java.util.Objects;
+import java.util.function.BiPredicate;
 
 public final class BooleanStateSignal extends StateSignalBase implements BooleanState {
 
     private boolean value;
 
-    BooleanStateSignal(ConfinedScope scope, boolean initial) {
+    public BooleanStateSignal(ConfinedScope scope, boolean initial) {
         super(scope);
         this.value = initial;
     }
 
     @Override
     public boolean value() {
-        preRead();
-        return value;
+        assertOpen();
+        return valueUnchecked();
     }
 
     private boolean valueUnchecked() {
@@ -28,7 +29,7 @@ public final class BooleanStateSignal extends StateSignalBase implements Boolean
 
     @Override
     public void set(boolean newValue) {
-        preWrite();
+        assertOpen();
 
         boolean oldValue = value;
         if (oldValue == newValue) {
@@ -41,7 +42,7 @@ public final class BooleanStateSignal extends StateSignalBase implements Boolean
 
     @Override
     public void update(BooleanUnaryOperator fn) {
-        preWrite();
+        assertOpen();
 
         boolean oldValue = value;
         boolean newValue = fn.applyAsBoolean(oldValue);
@@ -54,9 +55,8 @@ public final class BooleanStateSignal extends StateSignalBase implements Boolean
     }
 
     @Override
-    public <R> Signal<R> derive(BooleanFunction<? extends R> fn) {
-        Objects.requireNonNull(fn, "fn");
-        return scope.computed(() -> fn.apply(valueUnchecked()));
+    public <R> Signal<R> derive(BooleanFunction<? extends R> fn, BiPredicate<? super R, ? super R> equality) {
+        return scope.computed(() -> fn.apply(valueUnchecked()), equality);
     }
 
     @Override

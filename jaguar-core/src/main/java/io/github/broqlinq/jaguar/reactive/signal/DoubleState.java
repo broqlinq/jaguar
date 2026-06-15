@@ -1,4 +1,10 @@
 package io.github.broqlinq.jaguar.reactive.signal;
 
-public interface DoubleState {
+import java.util.function.DoubleUnaryOperator;
+
+public interface DoubleState extends DoubleSignal {
+
+    void set(double newValue);
+
+    void update(DoubleUnaryOperator updater);
 }
