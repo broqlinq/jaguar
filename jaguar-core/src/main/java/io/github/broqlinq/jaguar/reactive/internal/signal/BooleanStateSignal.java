@@ -4,6 +4,8 @@ import io.github.broqlinq.jaguar.reactive.function.*;
 import io.github.broqlinq.jaguar.reactive.internal.ConfinedScope;
 import io.github.broqlinq.jaguar.reactive.signal.*;
 
+import java.util.Objects;
+
 public final class BooleanStateSignal extends StateSignalBase implements BooleanState {
 
     private boolean value;
@@ -16,6 +18,11 @@ public final class BooleanStateSignal extends StateSignalBase implements Boolean
     @Override
     public boolean value() {
         preRead();
+        return value;
+    }
+
+    private boolean valueUnchecked() {
+        scope.track(this);
         return value;
     }
 
@@ -48,32 +55,38 @@ public final class BooleanStateSignal extends StateSignalBase implements Boolean
 
     @Override
     public <R> Signal<R> derive(BooleanFunction<? extends R> fn) {
-        return null;
+        Objects.requireNonNull(fn, "fn");
+        return scope.computed(() -> fn.apply(valueUnchecked()));
     }
 
     @Override
     public BooleanSignal deriveBoolean(BooleanUnaryOperator fn) {
-        return null;
+        Objects.requireNonNull(fn, "fn");
+        return scope.computed(() -> fn.applyAsBoolean(valueUnchecked()));
     }
 
     @Override
     public IntSignal deriveInt(BooleanToIntFunction fn) {
-        return null;
+        Objects.requireNonNull(fn, "fn");
+        return scope.computed(() -> fn.applyAsInt(valueUnchecked()));
     }
 
     @Override
     public LongSignal deriveLong(BooleanToLongFunction fn) {
-        return null;
+        Objects.requireNonNull(fn, "fn");
+        return scope.computed(() -> fn.applyAsLong(valueUnchecked()));
     }
 
     @Override
     public FloatSignal deriveFloat(BooleanToFloatFunction fn) {
-        return null;
+        Objects.requireNonNull(fn, "fn");
+        return scope.computed(() -> fn.applyAsFloat(valueUnchecked()));
     }
 
     @Override
     public DoubleSignal deriveDouble(BooleanToDoubleFunction fn) {
-        return null;
+        Objects.requireNonNull(fn, "fn");
+        return scope.computed(() -> fn.applyAsDouble(valueUnchecked()));
     }
 
 }
