@@ -1,10 +1,13 @@
 package io.github.broqlinq.jaguar.reactive.internal;
 
+import java.util.Objects;
+
 final class ExceptionAccumulator {
 
     private Throwable ex;
 
     ExceptionAccumulator runTask(Runnable task) {
+        Objects.requireNonNull(task, "task");
         try {
             task.run();
         } catch (Throwable e) {

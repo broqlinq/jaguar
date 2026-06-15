@@ -1,22 +1,22 @@
 package io.github.broqlinq.jaguar.reactive.internal;
 
-import io.github.broqlinq.jaguar.reactive.Scope;
 import io.github.broqlinq.jaguar.reactive.function.FloatSupplier;
+import io.github.broqlinq.jaguar.reactive.internal.signal.*;
 import io.github.broqlinq.jaguar.reactive.signal.*;
 
 import java.util.function.*;
 
-public final class ScopeImpl implements Scope {
+final class ReactiveContextImpl implements ReactiveContext {
 
-    private final SchedulerImpl scheduler;
+    private final ConfinedScope scope;
 
-    public ScopeImpl(SchedulerImpl scheduler) {
-        this.scheduler = scheduler;
+    public ReactiveContextImpl(ConfinedScope scope) {
+        this.scope = scope;
     }
 
     @Override
-    public <T> Signal<T> constant(T value) {
-        return null;
+    public <T> ConstantSignal<T> constant(T value) {
+        return new ConstantSignal<>(scope, value);
     }
 
     @Override
@@ -45,17 +45,17 @@ public final class ScopeImpl implements Scope {
     }
 
     @Override
-    public <T> State<T> state(T initial, BiPredicate<? super T, ? super T> predicate) {
+    public <T> StateSignal<T> state(T initial, BiPredicate<? super T, ? super T> predicate) {
+        return new StateSignal<>(scope, initial, predicate);
+    }
+
+    @Override
+    public BooleanStateSignal state(boolean initial) {
         return null;
     }
 
     @Override
-    public BooleanState state(boolean initial) {
-        return null;
-    }
-
-    @Override
-    public IntState state(int initial) {
+    public IntStateSignal state(int initial) {
         return null;
     }
 
@@ -75,8 +75,8 @@ public final class ScopeImpl implements Scope {
     }
 
     @Override
-    public <T> Signal<T> computed(Supplier<? extends T> calc) {
-        return null;
+    public <T> ComputedSignal<T> computed(Supplier<? extends T> calc, BiPredicate<? super T, ? super T> predicate) {
+        return new ComputedSignal<>(scope, calc, predicate);
     }
 
     @Override
@@ -105,22 +105,7 @@ public final class ScopeImpl implements Scope {
     }
 
     @Override
-    public Effect effect(Runnable effect) {
-        return null;
-    }
-
-    @Override
-    public void schedule(Runnable task) {
-
-    }
-
-    @Override
-    public void batch(Runnable task) {
-
-    }
-
-    @Override
-    public void close() {
-
+    public ReactiveEffect effect(Runnable effect) {
+        return new ReactiveEffect(scope, effect);
     }
 }

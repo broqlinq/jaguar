@@ -10,7 +10,7 @@ public interface Signal<T> {
 
     T value();
 
-    <R> Signal<R> compute(Function<? super T, ? extends R> fn);
+    <R> Signal<R> derive(Function<? super T, ? extends R> fn);
 
     BooleanSignal deriveBoolean(Predicate<? super T> fn);
 
