@@ -84,29 +84,33 @@ final class ReactiveContextImpl implements ReactiveContext {
     }
 
     @Override
-    public BooleanSignal computed(BooleanSupplier supplier) {
+    public BooleanComputedSignal computed(BooleanSupplier supplier) {
         Objects.requireNonNull(supplier, "supplier");
-        return null;
+        return new BooleanComputedSignal(scope, supplier);
     }
 
     @Override
-    public IntSignal computed(IntSupplier supplier) {
-        return null;
+    public IntComputedSignal computed(IntSupplier supplier) {
+        Objects.requireNonNull(supplier, "supplier");
+        return new IntComputedSignal(scope, supplier);
     }
 
     @Override
-    public LongSignal computed(LongSupplier supplier) {
-        return null;
+    public LongComputedSignal computed(LongSupplier supplier) {
+        Objects.requireNonNull(supplier, "supplier");
+        return new LongComputedSignal(scope, supplier);
     }
 
     @Override
-    public FloatSignal computed(FloatSupplier supplier) {
-        return null;
+    public FloatComputedSignal computed(FloatSupplier supplier) {
+        Objects.requireNonNull(supplier, "supplier");
+        return new FloatComputedSignal(scope, supplier);
     }
 
     @Override
-    public DoubleSignal computed(DoubleSupplier supplier) {
-        return null;
+    public DoubleComputedSignal computed(DoubleSupplier supplier) {
+        Objects.requireNonNull(supplier, "supplier");
+        return new DoubleComputedSignal(scope, supplier);
     }
 
     @Override

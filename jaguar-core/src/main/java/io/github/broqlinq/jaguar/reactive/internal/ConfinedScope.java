@@ -124,9 +124,6 @@ public final class ConfinedScope implements Scope, TrackingContext {
         assertOwnerThread();
         assertOpen();
 
-        Objects.requireNonNull(fn, "fn");
-        Objects.requireNonNull(equality, "equality");
-
         var computed = signalFactory.<T>computed(fn, equality);
         session.addComputedResource(computed);
         return computed;
@@ -136,35 +133,50 @@ public final class ConfinedScope implements Scope, TrackingContext {
     public BooleanSignal computed(BooleanSupplier calc) {
         assertOwnerThread();
         assertOpen();
-        return null;
+
+        var computed = signalFactory.computed(calc);
+        session.addComputedResource(computed);
+        return computed;
     }
 
     @Override
     public IntSignal computed(IntSupplier calc) {
         assertOwnerThread();
         assertOpen();
-        return null;
+
+        var computed = signalFactory.computed(calc);
+        session.addComputedResource(computed);
+        return computed;
     }
 
     @Override
     public LongSignal computed(LongSupplier calc) {
         assertOwnerThread();
         assertOpen();
-        return null;
+
+        var computed = signalFactory.computed(calc);
+        session.addComputedResource(computed);
+        return computed;
     }
 
     @Override
     public FloatSignal computed(FloatSupplier calc) {
         assertOwnerThread();
         assertOpen();
-        return null;
+
+        var computed = signalFactory.computed(calc);
+        session.addComputedResource(computed);
+        return computed;
     }
 
     @Override
     public DoubleSignal computed(DoubleSupplier calc) {
         assertOwnerThread();
         assertOpen();
-        return null;
+
+        var computed = signalFactory.computed(calc);
+        session.addComputedResource(computed);
+        return computed;
     }
 
     @Override

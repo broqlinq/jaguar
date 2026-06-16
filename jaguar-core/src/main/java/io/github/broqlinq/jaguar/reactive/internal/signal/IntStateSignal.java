@@ -41,11 +41,12 @@ public final class IntStateSignal extends StateSignalBase implements IntState {
     }
 
     @Override
-    public void update(IntUnaryOperator fn) {
-        preWrite();
+    public void update(IntUnaryOperator updater) {
+        assertOpen();
+        Objects.requireNonNull(updater, "updater");
 
         int oldValue = value;
-        int newValue = fn.applyAsInt(oldValue);
+        int newValue = updater.applyAsInt(oldValue);
 
         if (oldValue == newValue) {
             return;

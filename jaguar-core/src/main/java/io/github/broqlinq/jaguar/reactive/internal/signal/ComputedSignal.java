@@ -47,31 +47,38 @@ public final class ComputedSignal<T> extends ComputedSignalBase implements Signa
 
     @Override
     public <R> Signal<R> derive(Function<? super T, ? extends R> fn, BiPredicate<? super R, ? super R> equality) {
+        Objects.requireNonNull(fn, "fn");
+        Objects.requireNonNull(equality, "equality");
         return scope.computed(() -> fn.apply(valueUnchecked()), equality);
     }
 
     @Override
     public BooleanSignal deriveBoolean(Predicate<? super T> fn) {
+        Objects.requireNonNull(fn, "fn");
         return scope.computed(() -> fn.test(valueUnchecked()));
     }
 
     @Override
     public IntSignal deriveInt(ToIntFunction<? super T> fn) {
+        Objects.requireNonNull(fn, "fn");
         return scope.computed(() -> fn.applyAsInt(valueUnchecked()));
     }
 
     @Override
     public LongSignal deriveLong(ToLongFunction<? super T> fn) {
+        Objects.requireNonNull(fn, "fn");
         return scope.computed(() -> fn.applyAsLong(valueUnchecked()));
     }
 
     @Override
     public FloatSignal deriveFloat(ToFloatFunction<? super T> fn) {
+        Objects.requireNonNull(fn, "fn");
         return scope.computed(() -> fn.applyAsFloat(valueUnchecked()));
     }
 
     @Override
     public DoubleSignal deriveDouble(ToDoubleFunction<? super T> fn) {
+        Objects.requireNonNull(fn, "fn");
         return scope.computed(() -> fn.applyAsDouble(valueUnchecked()));
     }
 }

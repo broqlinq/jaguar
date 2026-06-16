@@ -33,9 +33,8 @@ public final class StateSignal<T> extends StateSignalBase implements State<T> {
 
     @Override
     public void update(UnaryOperator<T> updater) {
+        assertOpen();
         Objects.requireNonNull(updater, "updater");
-
-        preWrite();
 
         T oldValue = value;
         T newValue = updater.apply(oldValue);

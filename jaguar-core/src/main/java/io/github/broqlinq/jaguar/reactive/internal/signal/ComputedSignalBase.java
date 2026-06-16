@@ -110,11 +110,5 @@ abstract class ComputedSignalBase extends ReactiveNode {
         notifyDependentsStale();
     }
 
-    @Override
-    protected void onDispose() {
-        unlinkAllDependencies();
-        unlinkAllDependents();
-    }
-
     protected abstract boolean recomputeValue();
 }

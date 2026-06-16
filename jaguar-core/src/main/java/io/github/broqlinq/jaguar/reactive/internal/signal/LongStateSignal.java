@@ -4,6 +4,7 @@ import io.github.broqlinq.jaguar.reactive.function.LongToFloatFunction;
 import io.github.broqlinq.jaguar.reactive.internal.ConfinedScope;
 import io.github.broqlinq.jaguar.reactive.signal.*;
 
+import java.util.Objects;
 import java.util.function.*;
 
 public class LongStateSignal extends StateSignalBase implements LongState {
@@ -31,6 +32,7 @@ public class LongStateSignal extends StateSignalBase implements LongState {
     @Override
     public void update(LongUnaryOperator updater) {
         assertOpen();
+        Objects.requireNonNull(updater, "updater");
 
         long oldValue = this.value;
         long newValue = updater.applyAsLong(value);

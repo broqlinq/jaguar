@@ -41,11 +41,12 @@ public final class FloatStateSignal extends StateSignalBase implements FloatStat
     }
 
     @Override
-    public void update(FloatUnaryOperator fn) {
+    public void update(FloatUnaryOperator updater) {
         assertOpen();
+        Objects.requireNonNull(updater, "updater");
 
         float oldValue = this.value;
-        float newValue = fn.applyAsFloat(value);
+        float newValue = updater.applyAsFloat(value);
         if (oldValue == newValue) {
             return;
         }

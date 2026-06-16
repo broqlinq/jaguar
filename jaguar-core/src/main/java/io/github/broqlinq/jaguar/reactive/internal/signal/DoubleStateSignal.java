@@ -4,6 +4,7 @@ import io.github.broqlinq.jaguar.reactive.function.DoubleToFloatFunction;
 import io.github.broqlinq.jaguar.reactive.internal.ConfinedScope;
 import io.github.broqlinq.jaguar.reactive.signal.*;
 
+import java.util.Objects;
 import java.util.function.*;
 
 public final class DoubleStateSignal extends StateSignalBase implements DoubleState {
@@ -42,6 +43,7 @@ public final class DoubleStateSignal extends StateSignalBase implements DoubleSt
     @Override
     public void update(DoubleUnaryOperator updater) {
         assertOpen();
+        Objects.requireNonNull(updater, "updater");
 
         double oldValue = value;
         double newValue = updater.applyAsDouble(value);

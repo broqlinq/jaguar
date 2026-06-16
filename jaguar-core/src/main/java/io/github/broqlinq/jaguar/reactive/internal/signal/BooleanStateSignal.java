@@ -41,11 +41,12 @@ public final class BooleanStateSignal extends StateSignalBase implements Boolean
     }
 
     @Override
-    public void update(BooleanUnaryOperator fn) {
+    public void update(BooleanUnaryOperator updater) {
         assertOpen();
+        Objects.requireNonNull(updater, "updater");
 
         boolean oldValue = value;
-        boolean newValue = fn.applyAsBoolean(oldValue);
+        boolean newValue = updater.applyAsBoolean(oldValue);
         if (oldValue == newValue) {
             return;
         }
