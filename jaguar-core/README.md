@@ -184,7 +184,16 @@ record Person(String firstName, String lastName, Address address) {
 void main() {
     try (var scope = openScope()) {
         // person state contains all person data
-        var person = scope.state(new Person(...));
+        var person = scope.state(new Person(
+                "Mark",
+                "Smith",
+                new Address(
+                        "England",
+                        "London",
+                        "Oak Street 12",
+                        "123456"
+                )
+        ));
         
         // address state represents address of the person
         // from the state above
